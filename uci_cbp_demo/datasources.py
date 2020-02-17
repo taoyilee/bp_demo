@@ -8,11 +8,13 @@ from uci_cbp_demo.unpack_drgcbp import unpack_cap
 
 
 class RealDataSource_v2:
-    mac_addr = "CA:E7:1B:E8:10:B3"
     CHARAC_UUID = "71ee1401-1232-11ea-8d71-362b9e155667"
     last_time = 0
     current_time = 0
     delta_time = 0
+    MAC_ADDR = "CA:E7:1B:E8:10:B3"
+    UUID_ADDR = None
+    use_mac = True
 
     def callback(self, _, data):
         new_data = unpack_cap(data)
@@ -23,7 +25,7 @@ class RealDataSource_v2:
         self.queue.put({"time": self.current_time, "cap": new_data["cap"]})
 
     async def notify(self, client, loop):
-        print(f"Connecting...")
+        print(f"Connecting to {client.address}...")
         await client.connect()
         print(f"Starting notify...")
         await client.start_notify(self.CHARAC_UUID, self.callback)
@@ -37,7 +39,11 @@ class RealDataSource_v2:
 
     def __call__(self, *args, **kwargs):
         loop = asyncio.get_event_loop()
-        client = BleakClient(self.mac_addr, loop=loop)
+        if self.use_mac:
+            client = BleakClient(self.MAC_ADDR, loop=loop)
+        else:
+            client = BleakClient(self.UUID_ADDR, loop=loop)
+
         try:
             loop.create_task(self.notify(client, loop))
             loop.run_forever()
@@ -48,7 +54,15 @@ class RealDataSource_v2:
         finally:
             loop.close()
 
-    def __init__(self, q):
+    def __init__(self, q, mac=None, uuid=None):
+        if mac is not None and uuid is not None:
+            raise ValueError("Only one of MAC and UUID can be specified.")
+        if mac is not None:
+            self.use_mac = True
+            self.MAC_ADDR = mac
+        if uuid is not None:
+            self.use_mac = False
+            self.UUID_ADDR = uuid
         self.queue = q
 
 

@@ -57,7 +57,7 @@ def update_plot(q, root, fig, line_cap, ax_cap, canvas, a, b):
     root.after(10, update_plot, q, root, fig, line_cap, ax_cap, canvas, a, b)
 
 
-def start_gui(a=1, b=0, mock=False):
+def start_gui(a=1, b=0, mock=False, mac=None, uuid=None):
     root = tkinter.Tk()
     root.wm_title("Continuous Blood Pressure")
     ws = root.winfo_screenwidth()
@@ -88,7 +88,7 @@ def start_gui(a=1, b=0, mock=False):
         print("Use mock data source")
         data_source = MockDataSource(q)
     else:
-        data_source = RealDataSource_v2(q)
+        data_source = RealDataSource_v2(q, mac, uuid)
     p = Process(target=data_source)
     p.start()
     update_plot(q, root, fig, line_cap, ax_cap, canvas, a, b)

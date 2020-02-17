@@ -56,6 +56,23 @@ To list available CLI options, use
     # -b INTEGER  Shifting in Y
     # --help      Show this message and exit.
 
+Trouble Shoot
+---------------
+1. If you run into issues saying
+
+      Could not fetch URL https://pypi.python.org/ ... There was a problem confirming the ssl certificate: [SSL: TLSV1_ALERT_PROTOCOL_VERSION] tlsv1 alert protocol version (_ssl.c:645) - skipping
+
+   Try follow steps described in `pypa repository <https://github.com/pypa/pip/issues/5236>`_
+
+.. code-block:: console
+
+    curl https://bootstrap.pypa.io/get-pip.py | python
+
+MAC OS Notes
+------------------
+1. OS X/macOS support via Core Bluetooth API, from at least version 10.11
+2. The macOS backend of Bleak is written with pyobjc directives for interfacing with Foundation and CoreBluetooth APIs. There are some values that pyobjc is not able to overwrite and thuse the corebleak framework was written to circumvent these issues. The most noticible difference between the other backends of bleak and this backend, is that CoreBluetooth doesn’t scan for other devices via MAC address. Instead, UUIDs are utilized that are often unique between the device that is scanning the the device that is being scanned.
+
 Credits
 -------
 This package is co-developed with Wongi Baek and Joonkyu Seo.
