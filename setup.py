@@ -34,7 +34,7 @@ setup(
     description="GUI to demo continuous blood pressure sensing",
     entry_points={
         'console_scripts': [
-            'uci_cbp_demo=uci_cbp_demo.cli:main',
+            'uci_cbp_demo=uci_cbp_demo.cli:cli',
         ],
     },
     install_requires=requirements,
