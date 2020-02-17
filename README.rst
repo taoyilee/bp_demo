@@ -23,10 +23,38 @@ GUI to demo continuous blood pressure sensing
 * Documentation: https://uci-cbp-demo.readthedocs.io.
 
 
-Features
---------
+Quick Start
+-------------
+Following command assumes a Linux environment. For Windows and MacOSX setup, you may need to tweak the commands a
+little bit, according to your system setup.
 
-* TODO
+.. code-block:: console
+
+    # setup virtual environment
+    python -m venv venv
+
+    # enter virtual environment
+    source venv/bin/activate
+
+    # install the latest code from PyPI
+    pip install pip install uci-cbp-demo
+
+    # power up the hardware
+
+    # start GUI with parameters a=1 b=0
+    uci_cbp_demo gui -a 1 -b 0
+
+To list available CLI options, use
+
+.. code-block:: console
+
+    uci_cbp_demo gui --help
+    # Usage: uci_cbp_demo gui [OPTIONS]
+    #
+    # Options:
+    # -a INTEGER  Scaling coefficient
+    # -b INTEGER  Shifting in Y
+    # --help      Show this message and exit.
 
 Credits
 -------
