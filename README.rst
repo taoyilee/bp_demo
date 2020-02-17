@@ -16,11 +16,15 @@ UCI cBP demo
 
 
 
-GUI to demo continuous blood pressure sensing
+GUI to demo continuous blood pressure sensing works on Linux, Windows, and MacOS X.
+This GUI requires custom firmware installed on `MbientLab Metamotion R device <https://mbientlab.com/metamotionr>`_, and a capacitor to digital converter
+from Analog Devices, `AD7746 <https://www.analog.com/media/en/technical-documentation/data-sheets/AD7745_7746.pdf>`_.
+
+Pull requests welcome! Please fork repository to begin with.
 
 
 * Free software: MIT license
-* Documentation: https://uci-cbp-demo.readthedocs.io.
+* Documentation: https://uci-bp-demo.readthedocs.io/en/latest/index.html.
 
 
 Quick Start
@@ -56,8 +60,8 @@ To list available CLI options, use
     # -b INTEGER  Shifting in Y
     # --help      Show this message and exit.
 
-Trouble Shoot
----------------
+Troubleshooting
+------------------
 1. If you run into issues saying
 
       Could not fetch URL https://pypi.python.org/ ... There was a problem confirming the ssl certificate: [SSL: TLSV1_ALERT_PROTOCOL_VERSION] tlsv1 alert protocol version (_ssl.c:645) - skipping
