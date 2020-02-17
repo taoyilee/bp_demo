@@ -12,7 +12,7 @@ from scipy.interpolate import interp1d
 from scipy.signal import cheby2, sosfiltfilt
 
 from uci_cbp_demo.constants import MAX_DATA_QUEUE, WINDOW, TARGET_FS, CUTOFF, STOP_ATTEN
-from uci_cbp_demo.datasources import RealDataSource_v2
+from uci_cbp_demo.datasources import RealDataSource_v2, MockDataSource
 from uci_cbp_demo.gui_helpers import _quit
 
 cap_data_queue = []
@@ -57,7 +57,7 @@ def update_plot(q, root, fig, line_cap, ax_cap, canvas, a, b):
     root.after(10, update_plot, q, root, fig, line_cap, ax_cap, canvas, a, b)
 
 
-def start_gui(a=1, b=0):
+def start_gui(a=1, b=0, mock=False):
     root = tkinter.Tk()
     root.wm_title("Continuous Blood Pressure")
     ws = root.winfo_screenwidth()
@@ -84,7 +84,11 @@ def start_gui(a=1, b=0):
     button.pack(side=tkinter.BOTTOM)
 
     q = Queue()
-    data_source = RealDataSource_v2(q)
+    if mock:
+        print("Use mock data source")
+        data_source = MockDataSource(q)
+    else:
+        data_source = RealDataSource_v2(q)
     p = Process(target=data_source)
     p.start()
     update_plot(q, root, fig, line_cap, ax_cap, canvas, a, b)

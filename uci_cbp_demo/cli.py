@@ -18,9 +18,10 @@ def cli(debug):
 @cli.command()  # @cli, not @click!
 @click.option('-a', default=1, help='Scaling coefficient')
 @click.option('-b', default=0, help='Shifting in Y')
-def gui(a=1, b=0):
+@click.option('--mock/--no-mock', default=False)
+def gui(a=1, b=0, mock=False):
     from uci_cbp_demo.gui_cap import start_gui
-    start_gui(a, b)
+    start_gui(a, b, mock=mock)
 
 
 if __name__ == "__main__":
