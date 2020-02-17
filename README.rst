@@ -30,6 +30,7 @@ Features
 
 Credits
 -------
+This package is co-developed with Wongi Baek and Joonkyu Seo.
 
 This package was created with Cookiecutter_ and the `audreyr/cookiecutter-pypackage`_ project template.
 
