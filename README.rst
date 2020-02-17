@@ -37,7 +37,7 @@ little bit, according to your system setup.
     source venv/bin/activate
 
     # install the latest code from PyPI
-    pip install pip install uci-cbp-demo
+    pip install uci-cbp-demo
 
     # power up the hardware
 
