@@ -4,7 +4,7 @@ import asyncio
 
 from bleak import BleakClient
 
-from uci_cbp_demo.unpack_drgcbp import unpack_cap
+from uci_cbp_demo.bluetooth.unpack_drgcbp import unpack_cap
 
 
 class RealDataSource_v2:

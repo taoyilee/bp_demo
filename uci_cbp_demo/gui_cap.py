@@ -11,7 +11,7 @@ from matplotlib.lines import Line2D
 from scipy.interpolate import interp1d
 from scipy.signal import cheby2, sosfiltfilt
 
-from uci_cbp_demo.constants import MAX_DATA_QUEUE, WINDOW, TARGET_FS, CUTOFF, STOP_ATTEN
+from uci_cbp_demo.bluetooth.constants import MAX_DATA_QUEUE, WINDOW, TARGET_FS, CUTOFF, STOP_ATTEN
 from uci_cbp_demo.datasources import RealDataSource_v2, MockDataSource
 from uci_cbp_demo.gui_helpers import _quit
 
