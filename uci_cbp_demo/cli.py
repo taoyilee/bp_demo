@@ -44,16 +44,16 @@ def tui(addr=None, ch1=True, ch2=True):
 
     pipe_1, pipe2 = Pipe()
     sensor = SensorBoard(addr=addr, pipe=pipe2)
-    keyboard_interrupt = True
+
     if ch1 and ch2:
         logger.info("Notifying CH1/CH2")
-        process = Process(target=sensor.start_cap_notification, args=(keyboard_interrupt,))
+        process = Process(target=sensor.start_cap_notification)
     elif ch1:
         logger.info("Notifying CH1")
-        process = Process(target=sensor.start_cap1_notification, args=(keyboard_interrupt,))
+        process = Process(target=sensor.start_cap1_notification)
     elif ch2:
         logger.info("Notifying CH2")
-        process = Process(target=sensor.start_cap2_notification, args=(keyboard_interrupt,))
+        process = Process(target=sensor.start_cap2_notification)
     else:
         raise ValueError("Either CH1 or CH2 must be enabled")
     process.start()

@@ -12,6 +12,48 @@ from uci_cbp_demo.bluetooth.constants import CAP1_CHAR_UUID, CAP2_CHAR_UUID
 logger = logging.getLogger("bp_demo")
 
 
+async def while_loop(pipe, wait_time=None):
+    if wait_time is not None:
+        await asyncio.sleep(wait_time)
+    else:
+        while True:
+            if pipe.poll():
+                break
+            await asyncio.sleep(1)
+
+
+async def _stop_notify_uuid(client, uuid):
+    try:
+        while True:
+            await client.stop_notify(uuid)
+            await asyncio.sleep(1)
+    except txdbus.error.RemoteError:
+        pass
+
+
+async def _start_notify_uuid(addr, loop, pipe, uuids, callbacks, wait_time=None):
+    logger.info(f"Notify characteristics of device {addr}")
+    client = BleakClient(addr, loop=loop)
+    await client.connect()
+    logger.info(f"Connected to {client.address}")
+    pipe.send("connected")
+    assert len(set(uuids)) == len(uuids), "Characteristic UUIDs must be unique"
+    for u, c in zip(uuids, callbacks):
+        await client.start_notify(u, c)
+
+    await while_loop(pipe, wait_time)
+    logger.info("Stopping notification...")
+    for u in uuids:
+        await _stop_notify_uuid(client, u)
+    await client.disconnect()
+
+
+def run_until_complete(f, wait_time=None):
+    loop = asyncio.get_event_loop()
+    # https://github.com/hbldh/bleak/issues/93; new_event_loop is not going to work.
+    loop.run_until_complete(f(loop, wait_time))
+
+
 class SensorBoard:
     _cap1_callback = CapCallback()
     _cap2_callback = CapCallback()
@@ -20,78 +62,24 @@ class SensorBoard:
         self.addr = addr
         self.pipe = pipe
 
-    async def stop_cap1_notify(self, client):
-        try:
-            while True:
-                await client.stop_notify(CAP1_CHAR_UUID)
-                await asyncio.sleep(1)
-        except txdbus.error.RemoteError:
-            pass
+    async def notify_cap1(self, loop, wait_time=None):
+        await _start_notify_uuid(self.addr, loop, self.pipe, [CAP1_CHAR_UUID], [self.cap1_callback], wait_time)
 
-    async def stop_cap2_notify(self, client):
-        try:
-            while True:
-                await client.stop_notify(CAP2_CHAR_UUID)
-                await asyncio.sleep(1)
-        except txdbus.error.RemoteError:
-            pass
+    async def notify_cap2(self, loop, wait_time=None):
+        await _start_notify_uuid(self.addr, loop, self.pipe, [CAP1_CHAR_UUID], [self.cap1_callback], wait_time)
 
-    async def while_loop(self, keyboard_interrupt=True):
-        while True:
-            if keyboard_interrupt and self.pipe.poll():
-                break
-            await asyncio.sleep(1)
+    async def notify_both(self, loop, wait_time=None):
+        await _start_notify_uuid(self.addr, loop, self.pipe, [CAP1_CHAR_UUID, CAP2_CHAR_UUID],
+                                 [self.cap1_callback, self.cap2_callback], wait_time)
 
-    async def notify_cap1(self, loop, keyboard_interrupt=True):
-        logger.info(f"Notify characteristics of device {self.addr}")
-        async with BleakClient(self.addr, loop=loop) as client:
-            x = await client.is_connected()
-            logger.info(f"Connected: {x}")
-            self.pipe.send("connected")
-            await client.start_notify(CAP1_CHAR_UUID, self.cap1_callback)
-            await self.while_loop(keyboard_interrupt)
-            logger.info("Stopping notification...")
-            await client.stop_notify(CAP1_CHAR_UUID)
+    def start_cap1_notification(self, wait_time=None):
+        run_until_complete(self.notify_cap1, wait_time)
 
-    async def notify_cap2(self, loop, keyboard_interrupt=True):
-        logger.info(f"Notify characteristics of device {self.addr}")
-        async with BleakClient(self.addr, loop=loop) as client:
-            x = await client.is_connected()
-            logger.info(f"Connected: {x}")
-            self.pipe.send("connected")
-            await client.start_notify(CAP2_CHAR_UUID, self.cap2_callback)
-            await self.while_loop(keyboard_interrupt)
-            logger.info("Stopping notification...")
-            await client.stop_notify(CAP2_CHAR_UUID)
+    def start_cap_notification(self, wait_time=None):
+        run_until_complete(self.notify_both, wait_time)
 
-    async def notify_both(self, loop, keyboard_interrupt=True):
-        logger.info(f"Notify characteristics of device {self.addr}")
-        client = BleakClient(self.addr, loop=loop)
-        await client.connect()
-        logger.info(f"Connected to {self.addr}")
-        self.pipe.send("connected")
-        await client.start_notify(CAP1_CHAR_UUID, self.cap1_callback)
-        await client.start_notify(CAP2_CHAR_UUID, self.cap2_callback)
-        await self.while_loop(keyboard_interrupt)
-        logger.info("Stopping notification...")
-        # await self.stop_cap1_notify(client)
-        # await self.stop_cap2_notify(client)
-        await client.disconnect()
-
-    def start_cap1_notification(self, keyboard_interrupt=True):
-        loop = asyncio.get_event_loop()
-        # https://github.com/hbldh/bleak/issues/93; new_event_loop is not going to work.
-        loop.run_until_complete(self.notify_cap1(loop, keyboard_interrupt))
-
-    def start_cap_notification(self, keyboard_interrupt=True):
-        loop = asyncio.get_event_loop()
-        # https://github.com/hbldh/bleak/issues/93; new_event_loop is not going to work.
-        loop.run_until_complete(self.notify_both(loop, keyboard_interrupt))
-
-    def start_cap2_notification(self, keyboard_interrupt=True):
-        loop = asyncio.get_event_loop()
-        # https://github.com/hbldh/bleak/issues/93; new_event_loop is not going to work.
-        loop.run_until_complete(self.notify_cap2(loop, keyboard_interrupt))
+    def start_cap2_notification(self, wait_time=None):
+        run_until_complete(self.notify_cap1, wait_time)
 
     @property
     def cap1_callback(self):
@@ -103,8 +91,10 @@ class SensorBoard:
 
     @cap1_callback.setter
     def cap1_callback(self, value):
+        assert callable(value), "callback must be callable"
         self._cap1_callback = value
 
     @cap2_callback.setter
     def cap2_callback(self, value):
+        assert callable(value), "callback must be callable"
         self._cap2_callback = value
