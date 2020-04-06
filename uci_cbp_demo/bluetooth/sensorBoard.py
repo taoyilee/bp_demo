@@ -3,6 +3,7 @@
 import asyncio
 import logging
 
+import txdbus.error
 from bleak import BleakClient
 
 from uci_cbp_demo.bluetooth.callbacks import CapCallback
@@ -18,6 +19,22 @@ class SensorBoard:
     def __init__(self, addr, pipe):
         self.addr = addr
         self.pipe = pipe
+
+    async def stop_cap1_notify(self, client):
+        try:
+            while True:
+                await client.stop_notify(CAP1_CHAR_UUID)
+                await asyncio.sleep(1)
+        except txdbus.error.RemoteError:
+            pass
+
+    async def stop_cap2_notify(self, client):
+        try:
+            while True:
+                await client.stop_notify(CAP2_CHAR_UUID)
+                await asyncio.sleep(1)
+        except txdbus.error.RemoteError:
+            pass
 
     async def while_loop(self, keyboard_interrupt=True):
         while True:
@@ -49,16 +66,17 @@ class SensorBoard:
 
     async def notify_both(self, loop, keyboard_interrupt=True):
         logger.info(f"Notify characteristics of device {self.addr}")
-        async with BleakClient(self.addr, loop=loop) as client:
-            x = await client.is_connected()
-            logger.info(f"Connected: {x}")
-            self.pipe.send("connected")
-            await client.start_notify(CAP1_CHAR_UUID, self.cap1_callback)
-            await client.start_notify(CAP2_CHAR_UUID, self.cap2_callback)
-            await self.while_loop(keyboard_interrupt)
-            logger.info("Stopping notification...")
-            await client.stop_notify(CAP1_CHAR_UUID)
-            await client.stop_notify(CAP2_CHAR_UUID)
+        client = BleakClient(self.addr, loop=loop)
+        await client.connect()
+        logger.info(f"Connected to {self.addr}")
+        self.pipe.send("connected")
+        await client.start_notify(CAP1_CHAR_UUID, self.cap1_callback)
+        await client.start_notify(CAP2_CHAR_UUID, self.cap2_callback)
+        await self.while_loop(keyboard_interrupt)
+        logger.info("Stopping notification...")
+        # await self.stop_cap1_notify(client)
+        # await self.stop_cap2_notify(client)
+        await client.disconnect()
 
     def start_cap1_notification(self, keyboard_interrupt=True):
         loop = asyncio.get_event_loop()
