@@ -10,7 +10,7 @@ with open('README.rst') as readme_file:
 with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
-requirements = ['Click>=7.0', 'numpy==1.18.1', 'matplotlib==3.1.3', 'scipy==1.4.1', 'bleak==0.5.1']
+requirements = ['Click>=7.0', 'numpy==1.18.1', 'matplotlib==3.1.3', 'scipy==1.4.1', 'bleak==0.6.1']
 
 setup_requirements = ['pytest-runner', ]
 
@@ -25,6 +25,8 @@ setup(
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
         'Natural Language :: English',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
     ],
     description="GUI to demo continuous blood pressure sensing",
@@ -44,6 +46,6 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/taoyilee/bp_demo',
-    version='0.1.2',
+    version='0.2.4',
     zip_safe=False,
 )

@@ -4,7 +4,7 @@ import asyncio
 
 from bleak import BleakClient
 
-from uci_cbp_demo.unpack_drgcbp import unpack_cap
+from uci_cbp_demo.bluetooth.unpack_drgcbp import unpack_cap
 
 
 class RealDataSource_v2:
@@ -54,15 +54,15 @@ class RealDataSource_v2:
         finally:
             loop.close()
 
-    def __init__(self, q, mac=None, uuid=None):
+    def __init__(self, q, mac: str = None, uuid: str = None):
         if mac is not None and uuid is not None:
             raise ValueError("Only one of MAC and UUID can be specified.")
         if mac is not None:
             self.use_mac = True
-            self.MAC_ADDR = mac
+            self.MAC_ADDR = mac.strip()
         if uuid is not None:
             self.use_mac = False
-            self.UUID_ADDR = uuid
+            self.UUID_ADDR = uuid.strip()
         self.queue = q
 
 
