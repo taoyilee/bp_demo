@@ -19,7 +19,7 @@ test_requirements = ['pytest>=3', ]
 setup(
     author="UCI cBP demo",
     author_email='taoyil@uci.edu',
-    python_requires='>=3.8',
+    python_requires='>=3.6',
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
