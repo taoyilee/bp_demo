@@ -2,14 +2,11 @@
 # Copyright (C) Michael Tao-Yi Lee (taoyil AT UCI EDU)import sys
 import logging
 import sys
-import termios
-import time
-import tty
 from multiprocessing import Process, Pipe
 
 import click
 
-from uci_cbp_demo.bluetooth.callbacks import is_data
+from uci_cbp_demo.terminal import TerminalManager
 
 logger = logging.getLogger("bp_demo")
 console_handler = logging.StreamHandler()
@@ -20,13 +17,17 @@ console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
 DEBUG = False
+MOCK = False  # use mock data source
 
 
 @click.group()
-@click.option('--debug/--no-debug', default=False)
-def cli(debug):
+@click.option('--debug/--no-debug', help="Enable DEBUG mode", default=False)
+@click.option('--mock/--no-mock', help="Use mock data source instead of reading from Bluetooth", default=False)
+def cli(debug=False, mock=False):
     global DEBUG
     DEBUG = debug
+    global MOCK
+    MOCK = mock
     if DEBUG:
         logger.setLevel(logging.DEBUG)
         console_handler.setLevel(logging.DEBUG)
@@ -39,11 +40,9 @@ def cli(debug):
 @click.option('--ch2/--no-ch2', default=True)
 def tui(addr=None, ch1=True, ch2=True):
     from uci_cbp_demo.bluetooth.sensorBoard import SensorBoard
-
-    old_settings = termios.tcgetattr(sys.stdin)
-
-    pipe_1, pipe2 = Pipe()
-    sensor = SensorBoard(addr=addr, pipe=pipe2)
+    pipe_1, pipe_2 = Pipe()
+    tm = TerminalManager(pipe_1)
+    sensor = SensorBoard(addr=addr, pipe=pipe_2)
 
     if ch1 and ch2:
         logger.info("Notifying CH1/CH2")
@@ -57,26 +56,23 @@ def tui(addr=None, ch1=True, ch2=True):
     else:
         raise ValueError("Either CH1 or CH2 must be enabled")
     process.start()
-
-    while not pipe_1.poll():
-        time.sleep(1)  # wait for connection
-    tty.setcbreak(sys.stdin.fileno())
-    while not is_data():
-        pass
-    pipe_1.send("stop")
-    logger.info("Restoring tty...")
-    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+    tm.handle_session()
 
 
 @cli.command()  # @cli, not @click!
 @click.option('-a', default=1, help='Scaling coefficient')
 @click.option('-b', default=0, help='Shifting in Y')
-@click.option('--mock/--no-mock', default=False)
-@click.option('--mac', default=None)
-@click.option('--uuid', default=None)
-def gui(a=1, b=0, mock=False, mac=None, uuid=None):
-    from uci_cbp_demo.gui_cap import start_gui
-    start_gui(a, b, mock=mock, mac=mac, uuid=uuid)
+@click.option('--ch1/--no-ch1', default=True)
+@click.option('--ch2/--no-ch2', default=True)
+@click.option('--addr', help="Address (MAC: Windows/Linux; UUID: MacOSX)", default=None)
+def gui(a=1, b=0, ch1=True, ch2=True, addr=None):
+    from uci_cbp_demo.gui_cap import GUI
+    from uci_cbp_demo.bluetooth.sensorBoard import SensorBoard
+    pipe_1, pipe_2 = Pipe()
+    sensor = SensorBoard(addr=addr, pipe=pipe_2)
+    if not ch1 and not ch2:
+        raise ValueError("Either CH1 or CH2 must be enabled")
+    GUI(sensor, a, b, ch1, ch2).start_gui(pipe_1)
 
 
 @cli.command()  # @cli, not @click!

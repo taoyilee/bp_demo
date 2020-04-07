@@ -32,13 +32,14 @@ async def _stop_notify_uuid(client, uuid):
 
 
 async def _start_notify_uuid(addr, loop, pipe, uuids, callbacks, wait_time=None):
-    logger.info(f"Notify characteristics of device {addr}")
+    logger.info(f"Connecting to {addr}")
     client = BleakClient(addr, loop=loop)
     await client.connect()
     logger.info(f"Connected to {client.address}")
     pipe.send("connected")
     assert len(set(uuids)) == len(uuids), "Characteristic UUIDs must be unique"
     for u, c in zip(uuids, callbacks):
+        logger.info(f"Notifying {u}")
         await client.start_notify(u, c)
 
     await while_loop(pipe, wait_time)
@@ -55,8 +56,10 @@ def run_until_complete(f, wait_time=None):
 
 
 class SensorBoard:
-    _cap1_callback = CapCallback()
-    _cap2_callback = CapCallback()
+    _cap1_callback_internal = CapCallback()
+    _cap2_callback_internal = CapCallback()
+    _cap1_callback = None
+    _cap2_callback = None
 
     def __init__(self, addr, pipe):
         self.addr = addr
@@ -66,7 +69,7 @@ class SensorBoard:
         await _start_notify_uuid(self.addr, loop, self.pipe, [CAP1_CHAR_UUID], [self.cap1_callback], wait_time)
 
     async def notify_cap2(self, loop, wait_time=None):
-        await _start_notify_uuid(self.addr, loop, self.pipe, [CAP1_CHAR_UUID], [self.cap1_callback], wait_time)
+        await _start_notify_uuid(self.addr, loop, self.pipe, [CAP2_CHAR_UUID], [self.cap2_callback], wait_time)
 
     async def notify_both(self, loop, wait_time=None):
         await _start_notify_uuid(self.addr, loop, self.pipe, [CAP1_CHAR_UUID, CAP2_CHAR_UUID],
@@ -79,15 +82,19 @@ class SensorBoard:
         run_until_complete(self.notify_both, wait_time)
 
     def start_cap2_notification(self, wait_time=None):
-        run_until_complete(self.notify_cap1, wait_time)
+        run_until_complete(self.notify_cap2, wait_time)
 
     @property
     def cap1_callback(self):
-        return self._cap1_callback
+        if self._cap1_callback is not None:
+            return lambda sender, data: self._cap1_callback(*self._cap1_callback_internal(sender, data))
+        return self._cap1_callback_internal
 
     @property
     def cap2_callback(self):
-        return self._cap2_callback
+        if self._cap2_callback is not None:
+            return lambda sender, data: self._cap2_callback(*self._cap2_callback_internal(sender, data))
+        return self._cap2_callback_internal
 
     @cap1_callback.setter
     def cap1_callback(self, value):

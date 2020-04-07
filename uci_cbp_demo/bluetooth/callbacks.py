@@ -12,6 +12,7 @@ import numpy as np
 
 from uci_cbp_demo.bluetooth.constants import CAP1_CHAR_UUID
 from uci_cbp_demo.bluetooth.constants import CLK_PERIOD
+from uci_cbp_demo.datastructures import IterableQueue
 
 logger = logging.getLogger("bp_demo")
 
@@ -88,15 +89,33 @@ def unpack_characteristic_data(bytes_array):
 
 class CapCallback:
     def __init__(self):
-        self.base_timestamp = 0
-        self.prev_timestamp = None
+        self.history = IterableQueue(100)
+        self.prev_time = None
+        self.max_time = None
 
     def __call__(self, sender, bytes_array):
         data = CapData.from_bytes(sender, bytes_array)
-        _timestamp = self.base_timestamp + data.time
-        if self.prev_timestamp is not None and data.time < self.prev_timestamp:
-            self.base_timestamp += self.prev_timestamp
-        self.prev_timestamp = data.time
-        data.time = _timestamp
-        logger.debug(data)
+        if self.max_time is None:
+            self.max_time = data.time
+            self.prev_time = data.time
+            logger.debug(data)
+            return data, sender
+
+        if data.time > self.prev_time:
+            delta = data.time - self.prev_time
+            self.prev_time = data.time
+            self.history.put(delta)
+            self.max_time += delta
+        else:
+            self.prev_time = data.time
+            try:
+                assert len(self.history) != 0, "history shouldn't be empty"
+                self.max_time += np.mean(self.history)
+            except AssertionError:
+                pass
+        data.time = self.max_time
+        if len(self.history) > 2:
+            logger.debug(f"{data} fs = {1 / np.mean(self.history):.2f}")
+        else:
+            logger.debug(f"{data}")
         return data, sender

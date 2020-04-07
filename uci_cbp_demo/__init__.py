@@ -2,4 +2,4 @@
 
 __author__ = """UCI cBP demo"""
 __email__ = 'taoyil@uci.edu'
-__version__ = '0.1.0'
+__version__ = '0.2.0'
