@@ -1,7 +1,7 @@
 # Byte-compiled / optimized / DLL files
 .idea
 __pycache__/
-*.py[cod]
+*.py[co]
 *$py.class
 
 # C extensions
@@ -10,13 +10,24 @@ __pycache__/
 # Distribution / packaging
 .Python
 env/
-build/
+build/lib
+build/bdist.linux-x86_64
+
+build/nsis/lib
+build/nsis/msvcrt
+build/nsis/pkgs
+build/nsis/Python
+build/nsis/installer.nsi
+build/nsis/LICENSE
+build/nsis/*.pyw
+build/nsis/README.rst
+build/nsis/*.ico
+
 develop-eggs/
 dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/

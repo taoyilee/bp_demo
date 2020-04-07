@@ -2,6 +2,7 @@
 # Copyright (C) Michael Tao-Yi Lee (taoyil AT UCI EDU)
 
 import logging
+import multiprocessing
 import select
 import struct
 import sys
@@ -88,8 +89,12 @@ def unpack_characteristic_data(bytes_array):
 
 
 class CapCallback:
-    def __init__(self):
+    def __init__(self, queue=None):
         self.history = IterableQueue(100)
+        if queue is not None:
+            assert isinstance(queue, multiprocessing.queues.Queue), \
+                "must assign a multiprocessor.Queue to this attribute"
+        self.queue = queue
         self.prev_time = None
         self.max_time = None
 
@@ -118,4 +123,6 @@ class CapCallback:
             logger.debug(f"{data} fs = {1 / np.mean(self.history):.2f}")
         else:
             logger.debug(f"{data}")
+        if self.queue is not None:
+            self.queue.put(data)
         return data, sender

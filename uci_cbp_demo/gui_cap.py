@@ -3,7 +3,7 @@
 import logging
 import time
 import tkinter
-from multiprocessing import Pipe, Process, Queue
+from multiprocessing import Pipe
 from queue import Empty
 from tkinter import messagebox
 
@@ -14,9 +14,9 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from scipy.interpolate import interp1d
 
+from uci_cbp_demo.bluetooth import SensorBoard
 from uci_cbp_demo.bluetooth.callbacks import CapData
 from uci_cbp_demo.bluetooth.constants import TARGET_TS, DISPLAY_WINDOW, FS, FILTER_WINDOW
-from uci_cbp_demo.bluetooth.sensorBoard import SensorBoard
 from uci_cbp_demo.datastructures import CapIterableQueue, CapDisplayDataQueue
 
 logger = logging.getLogger("bp_demo")
@@ -48,6 +48,18 @@ class StreamDataFilter:
         return value
 
 
+def send_start(pipe: "Pipe"):
+    pipe.send(("CONNECT", None))
+
+
+def send_pause(pipe: "Pipe"):
+    pipe.send(("PAUSE", None))
+
+
+def send_stop(pipe: "Pipe"):
+    pipe.send(("STOP", None))
+
+
 class GUI:
     fig = None
     root = None
@@ -57,15 +69,19 @@ class GUI:
     line_cap1 = None
     line_cap2 = None
 
+    def send_connect(self, pipe: "Pipe"):
+        pipe.send(("MAC", self.mac_str_var.get()))
+        send_start(pipe)
+
     def ask_quit(self, pipe: "Pipe"):
         if messagebox.askokcancel("Quit", "You want to quit now? *sniff*"):
-            pipe.send("stop")
+            send_stop(pipe)
             time.sleep(3)
             logger.info("destroying root")
             self.root.destroy()
             logger.info("finish destroying root")
 
-    def __init__(self, datasource: "SensorBoard", a=1, b=0, ch1=True, ch2=True):
+    def __init__(self, datasource: "SensorBoard", queues, a=1, b=0, ch1=True, ch2=True):
         self.a = a
         self.b = b
         self.datasource = datasource
@@ -78,23 +94,26 @@ class GUI:
         _filter_queue_size = int(FILTER_WINDOW * FS / self.channel)
         self.filter = {"cap1": StreamDataFilter(history=_filter_queue_size),
                        "cap2": StreamDataFilter(history=_filter_queue_size)}
-
+        self.queues = queues
         self.init_gui()
-        self.inter_process_queue = {"cap1": Queue(), "cap2": Queue()}
 
-    def init_gui(self):
+    def init_gui(self, addr="DC:4E:6D:9F:E3:BA"):
         self.root = tkinter.Tk()
         self.root.wm_title("Continuous Blood Pressure")
 
+        self.mac_str_var = tkinter.StringVar()
+        self.mac_str_var.set(addr)
         ws = self.root.winfo_screenwidth()
         hs = self.root.winfo_screenheight()
+        logger.info(f"Screen width  = {ws}")
+        logger.info(f"Screen height = {hs}")
+        n_monitors = 2 if ws / hs >= 2 else 1
         dpi = 100
-        from screeninfo import get_monitors
-        logging.info(f"You have {len(get_monitors())} monitors")
-        w, h = 0.9 / len(get_monitors()) * ws, 0.8 * hs
-        x, y = 0, 0
+        logger.info(f"I think you have {n_monitors} monitors")
+        w, h = (ws * 0.9) / n_monitors, 0.8 * hs
+        x, y = 10, 10
         self.root.geometry('%dx%d+%d+%d' % (w, h, x, y))
-        self.fig = Figure(figsize=(w / dpi, (h - 20) / dpi), dpi=dpi)
+        self.fig = Figure(figsize=(w / dpi, (h - 40) / dpi), dpi=dpi)
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)  # A tk.DrawingArea.
         if self.channel == 2:
             self.ax_cap1 = plt.subplot2grid((2, 1), (0, 0), fig=self.fig)
@@ -123,16 +142,10 @@ class GUI:
             self.ax_cap2.set_ylabel("Cap (pF)")
             self.ax_cap2.set_xlabel("Time (s)")
 
-    def _cap1_callback(self, data: "CapData", sender):
-        self.inter_process_queue['cap1'].put(data)
-
-    def _cap2_callback(self, data: "CapData", sender):
-        self.inter_process_queue['cap2'].put(data)
-
     def _cap1_redraw(self):
         try:
             while True:
-                d = self.inter_process_queue['cap1'].get(block=False)
+                d = self.queues['cap1'].get(block=False)
                 self.display_queue['cap1'].put(d)
         except Empty:
             pass
@@ -140,7 +153,7 @@ class GUI:
         cap = self.display_queue['cap1'].cap
         self.line_cap1.set_data(time, cap)
 
-        if self.display_queue['cap1'].non_empty > 2:
+        if self.display_queue['cap1'].non_empty > 10:
             self.fs_cap1.set_text(f"{1 / np.mean(time[1:] - time[:-1]):.1f} Hz "
                                   f"({self.display_queue['cap1'].non_empty} samples)")
         try:
@@ -151,7 +164,7 @@ class GUI:
     def _cap2_redraw(self):
         try:
             while True:
-                d = self.inter_process_queue['cap2'].get(block=False)
+                d = self.queues['cap2'].get(block=False)
                 self.display_queue['cap2'].put(d)
         except Empty:
             pass
@@ -177,19 +190,20 @@ class GUI:
     def start_gui(self, pipe):
         self.canvas.get_tk_widget().pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=1)
         button = tkinter.Button(master=self.root, text="Quit", command=lambda: self.ask_quit(pipe))
-        button.pack(side=tkinter.BOTTOM)
+        button.pack(side=tkinter.LEFT)
 
-        if self.channel == 2:
-            self.datasource.cap1_callback = self._cap1_callback
-            self.datasource.cap2_callback = self._cap2_callback
-            p = Process(target=self.datasource.start_cap_notification)
-        elif self.ch1:
-            self.datasource.cap1_callback = self._cap1_callback
-            p = Process(target=self.datasource.start_cap1_notification)
-        elif self.ch2:
-            self.datasource.cap2_callback = self._cap2_callback
-            p = Process(target=self.datasource.start_cap2_notification)
-        p.start()
+        button_start = tkinter.Button(master=self.root, text="Start", command=lambda: send_start(pipe))
+        button_start.pack(side=tkinter.LEFT)
+
+        button_pause = tkinter.Button(master=self.root, text="Pause", command=lambda: send_pause(pipe))
+        button_pause.pack(side=tkinter.LEFT)
+
+        mac_entry = tkinter.Entry(master=self.root, textvariable=self.mac_str_var)
+        mac_entry.pack(side=tkinter.LEFT)
+
+        button_connect = tkinter.Button(master=self.root, text="Connect", command=lambda: self.send_connect(pipe))
+        button_connect.pack(side=tkinter.LEFT)
+
         timer = self.fig.canvas.new_timer(interval=1)
         timer.add_callback(self.redraw)
         timer.start()
