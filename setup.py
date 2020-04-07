@@ -46,6 +46,6 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/taoyilee/bp_demo',
-    version='0.2.4',
+    version='0.2.5',
     zip_safe=False,
 )

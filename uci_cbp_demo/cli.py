@@ -6,6 +6,8 @@ from multiprocessing import Process, Pipe
 
 import click
 
+import uci_cbp_demo
+
 logger = logging.getLogger("bp_demo")
 console_handler = logging.StreamHandler()
 logger.setLevel(logging.INFO)
@@ -19,6 +21,7 @@ MOCK = False
 
 
 @click.group()
+@click.version_option(version=uci_cbp_demo.__version__)
 @click.option('--debug/--no-debug', help="Enable DEBUG mode", default=False)
 @click.option('--mock/--no-mock', help="Use mock data source instead of reading from Bluetooth", default=False)
 def cli(debug=False, mock=False):
