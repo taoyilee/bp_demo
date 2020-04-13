@@ -18,6 +18,74 @@ from uci_cbp_demo.datastructures import IterableQueue
 logger = logging.getLogger("bp_demo")
 
 
+class IMUData:
+    time = None
+    name = ""
+    x = None
+    y = None
+    z = None
+
+    def __init__(self, time, x, y, z):
+        self.time = time
+        self.x = x
+        self.y = y
+        self.z = z
+
+    @classmethod
+    def from_bytes(cls, sender, bytes_array):
+        unpacked = struct.unpack("Hhhh", bytes_array)
+        reading_x = np.array(unpacked[1]) / (2 ** 15)
+        reading_y = np.array(unpacked[2]) / (2 ** 15)
+        reading_z = np.array(unpacked[3]) / (2 ** 15)
+        time_stamp = unpacked[0] * CLK_PERIOD
+        return cls(time_stamp, reading_x, reading_y, reading_z)
+
+    def __repr__(self):
+        return f"{self.name} {self.x:.2e} {self.y:.2e} {self.z:.2e}"
+
+
+class AccData(IMUData):
+    name = "acc"
+    full_scale = 4
+
+    @classmethod
+    def from_bytes(cls, sender, bytes_array):
+        unpacked = struct.unpack("Hhhh", bytes_array)
+        time_stamp = unpacked[0] * CLK_PERIOD
+        reading_x = cls.full_scale * unpacked[1] / 2 ** 15
+        reading_y = cls.full_scale * unpacked[2] / 2 ** 15
+        reading_z = cls.full_scale * unpacked[3] / 2 ** 15
+        return cls(time_stamp, reading_x, reading_y, reading_z)
+
+
+class GyroData(IMUData):
+    name = "gyro"
+    full_scale = 7.6e-3
+
+    @classmethod
+    def from_bytes(cls, sender, bytes_array):
+        unpacked = struct.unpack("Hhhh", bytes_array)
+        time_stamp = unpacked[0] * CLK_PERIOD
+        reading_x = cls.full_scale * unpacked[1] / 2.0 ** 15
+        reading_y = cls.full_scale * unpacked[2] / 2.0 ** 15
+        reading_z = cls.full_scale * unpacked[3] / 2.0 ** 15
+        return cls(time_stamp, reading_x, reading_y, reading_z)
+
+
+class MagData(IMUData):
+    name = "mag"
+    full_scale = 1.0
+
+    @classmethod
+    def from_bytes(cls, sender, bytes_array):
+        unpacked = struct.unpack("Hhhh", bytes_array)
+        reading_x = cls.full_scale * unpacked[1] / (2.0 ** 15)
+        reading_y = cls.full_scale * unpacked[2] / (2.0 ** 15)
+        reading_z = cls.full_scale * unpacked[3] / (2.0 ** 15)
+        time_stamp = unpacked[0] * CLK_PERIOD
+        return cls(time_stamp, reading_x, reading_y, reading_z)
+
+
 class CapData:
     time = None
     cap = None
@@ -67,27 +135,6 @@ def notification_handler(sender, data, output_queue: "Queue", output_prob=False)
         output_queue.put((mcu_time, time.time(), voltage))
 
 
-def unpack_characteristic_data(bytes_array):
-    unpacked = struct.unpack("IHHHIIIIhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhBBBB", bytes_array)
-    cap_readings = 8 * np.array(unpacked[4:8]) / 2 ** 24
-    imu = np.array(unpacked[8:44])  # / 2 ** 16
-    acc = 4 * (imu[0:12] / 2 ** 15)
-    gyro = 3.8e-3 * (imu[12:24] / 2 ** 15)
-    mask = np.array([True if u != 0 else False for u in unpacked[0:4]])
-    time_stamps = np.array(unpacked[0:4], dtype=float)
-    time_stamps[1:] += time_stamps[0]
-    time_stamps = time_stamps * CLK_PERIOD
-    time_stamps = time_stamps[mask]
-    channel = np.array(unpacked[44:48])
-    return {"time": time_stamps,
-            "cap": cap_readings[mask],
-            "acc": {"x": acc[0:4][mask], "y": acc[4:8][mask], "z": acc[8:12][mask]},
-            "gyro": {"x": gyro[0:4][mask], "y": gyro[4:8][mask], "z": gyro[8:12][mask]},
-            "mag": {"x": imu[24:28][mask], "y": imu[28:32][mask], "z": imu[32:36][mask]},
-            "channel": channel[mask]
-            }
-
-
 class CapCallback:
     def __init__(self, queue=None):
         self.history = IterableQueue(100)
@@ -121,6 +168,48 @@ class CapCallback:
         data.time = self.max_time
         if len(self.history) > 2:
             logger.debug(f"{data} fs = {1 / np.mean(self.history):.2f}")
+        else:
+            logger.debug(f"{data}")
+        if self.queue is not None:
+            self.queue.put(data)
+        return data, sender
+
+
+class IMUCallback:
+    def __init__(self, dataclass, queue=None):
+        self.history = IterableQueue(100)
+        if queue is not None:
+            assert isinstance(queue, multiprocessing.queues.Queue), \
+                "must assign a multiprocessor.Queue to this attribute"
+        self.queue = queue
+        self.prev_time = None
+        self.max_time = None
+        self.dataclass = dataclass
+
+    def __call__(self, sender, bytes_array):
+        # logger.info(f"{self.dataclass.name}: {bytes_array}")
+        data = self.dataclass.from_bytes(sender, bytes_array)
+        if self.max_time is None:
+            self.max_time = data.time
+            self.prev_time = data.time
+            logger.debug(data)
+            return data, sender
+
+        if data.time > self.prev_time:
+            delta = data.time - self.prev_time
+            self.prev_time = data.time
+            self.history.put(delta)
+            self.max_time += delta
+        else:
+            self.prev_time = data.time
+            try:
+                assert len(self.history) != 0, "history shouldn't be empty"
+                self.max_time += np.mean(self.history)
+            except AssertionError:
+                pass
+        data.time = self.max_time
+        if len(self.history) > 2:
+            logger.debug(f"{data.time:.1f} {data} fs = {1 / np.mean(self.history):.2f}")
         else:
             logger.debug(f"{data}")
         if self.queue is not None:

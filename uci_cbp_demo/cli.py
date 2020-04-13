@@ -37,6 +37,61 @@ def cli(debug=False, mock=False):
 
 @cli.command()
 @click.option('--addr', default=None)
+def acc(addr=None):
+    from uci_cbp_demo.terminal import TerminalManager
+
+    from uci_cbp_demo.bluetooth import SensorBoard
+    pipe_1, pipe_2 = Pipe()
+    tm = TerminalManager(pipe_1)
+
+    sensor = SensorBoard(addr=addr, pipe=pipe_2)
+    logger.info("Notifying ACC")
+    process = Process(target=sensor.start_acc_notification)
+
+    process.start()
+    pipe_1.send(("MAC", addr))
+    pipe_1.send(("CONNECT", None))
+    tm.handle_session()
+
+@cli.command()
+@click.option('--addr', default=None)
+def gyro(addr=None):
+    from uci_cbp_demo.terminal import TerminalManager
+
+    from uci_cbp_demo.bluetooth import SensorBoard
+    pipe_1, pipe_2 = Pipe()
+    tm = TerminalManager(pipe_1)
+
+    sensor = SensorBoard(addr=addr, pipe=pipe_2)
+    logger.info("Notifying ACC")
+    process = Process(target=sensor.start_gyro_notification)
+
+    process.start()
+    pipe_1.send(("MAC", addr))
+    pipe_1.send(("CONNECT", None))
+    tm.handle_session()
+
+
+@cli.command()
+@click.option('--addr', default=None)
+def mag(addr=None):
+    from uci_cbp_demo.terminal import TerminalManager
+
+    from uci_cbp_demo.bluetooth import SensorBoard
+    pipe_1, pipe_2 = Pipe()
+    tm = TerminalManager(pipe_1)
+
+    sensor = SensorBoard(addr=addr, pipe=pipe_2)
+    logger.info("Notifying ACC")
+    process = Process(target=sensor.start_mag_notification)
+
+    process.start()
+    pipe_1.send(("MAC", addr))
+    pipe_1.send(("CONNECT", None))
+    tm.handle_session()
+
+@cli.command()
+@click.option('--addr', default=None)
 @click.option('--ch1/--no-ch1', default=True)
 @click.option('--ch2/--no-ch2', default=True)
 def tui(addr=None, ch1=True, ch2=True):

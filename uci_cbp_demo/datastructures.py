@@ -81,3 +81,38 @@ class CapDisplayDataQueue(RotationalDataQueue):
     @property
     def cap(self):
         return np.array([d.cap for d in self if d is not None])
+
+
+class IMUDisplayDataQueue(RotationalDataQueue):
+    def __init__(self, size):
+        super(IMUDisplayDataQueue, self).__init__(size)
+        self._min_time = 0
+        self._prev_min_time = 0
+
+    def head_updated_callback(self):
+        self._prev_min_time = self._min_time
+        self._min_time = self[0].time
+
+    @property
+    def time(self):
+        _time = np.array([d.time for d in self if d is not None])
+        return _time
+
+    @property
+    def time_plot(self):
+        _time = np.array([d.time for d in self if d is not None])
+        _time -= self._min_time
+        _time[self._i:] += self._min_time - self._prev_min_time
+        return _time
+
+    @property
+    def x(self):
+        return np.array([d.x for d in self if d is not None])
+
+    @property
+    def y(self):
+        return np.array([d.y for d in self if d is not None])
+
+    @property
+    def z(self):
+        return np.array([d.z for d in self if d is not None])

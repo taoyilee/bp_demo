@@ -11,10 +11,10 @@ def gui_noargs():
 
 
 def gui(a=1, b=0, ch1=True, ch2=True, addr=None):
-    from uci_cbp_demo.gui_cap import GUI
+    from uci_cbp_demo.ui.gui_cap import GUI
     from uci_cbp_demo.bluetooth import SensorBoard
     pipe_1, pipe_2 = Pipe()
-    inter_process_queue = {"cap1": Queue(), "cap2": Queue()}
+    inter_process_queue = {"cap1": Queue(), "cap2": Queue(), "acc": Queue(), "gyro": Queue(), "mag": Queue()}
 
     sensor = SensorBoard(addr=addr, pipe=pipe_2)
 
@@ -30,3 +30,4 @@ def gui(a=1, b=0, ch1=True, ch2=True, addr=None):
     p.start()
     logger.info("Starting GUI")
     GUI(sensor, inter_process_queue, a, b, ch1, ch2).start_gui(pipe_1)
+    p.terminate()
