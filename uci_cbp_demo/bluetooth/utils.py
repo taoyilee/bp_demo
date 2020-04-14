@@ -9,7 +9,7 @@ from bleak import BleakClient
 logger = logging.getLogger("bp_demo")
 
 
-async def while_loop(pipe, wait_time=None, client=None, uuids=None, callbacks=None):
+async def while_loop(pipe, wait_time=None, client=None, uuids=None, callback=None):
     state = "RUNNING"
     if wait_time is not None:
         await asyncio.sleep(wait_time)
@@ -21,9 +21,9 @@ async def while_loop(pipe, wait_time=None, client=None, uuids=None, callbacks=No
                     break
                 elif state == "PAUSED" and message[0] == "STOP":
                     logger.info("Resuming notification")
-                    for u, c in zip(uuids, callbacks):
+                    for u in uuids:
                         logger.info(f"Resuming notification of {u}")
-                        await client.start_notify(u, c)
+                        await client.start_notify(u, callback)
                     break
                 elif state == "RUNNING" and message[0] == "PAUSE":
                     logger.info("Pausing notification")
@@ -33,9 +33,9 @@ async def while_loop(pipe, wait_time=None, client=None, uuids=None, callbacks=No
                 elif state == "PAUSED" and message[0] == "CONNECT":
                     state = "RUNNING"
                     logger.info("Resuming notification")
-                    for u, c in zip(uuids, callbacks):
+                    for u in uuids:
                         logger.info(f"Resuming notification of {u}")
-                        await client.start_notify(u, c)
+                        await client.start_notify(u, callback)
             await asyncio.sleep(1)
 
 
@@ -43,7 +43,7 @@ def invalid_message(c):
     logger.warning(f"Invalid message: {c}")
 
 
-async def _start_notify_uuid(addr, loop, pipe: "Pipe", uuids, callbacks, wait_time=None):
+async def _start_notify_uuid(addr, loop, pipe: "Pipe", uuids, callback, wait_time=None):
     connected = False
     while not connected:
         logger.info(f"Waiting for commands")
@@ -70,11 +70,11 @@ async def _start_notify_uuid(addr, loop, pipe: "Pipe", uuids, callbacks, wait_ti
         pipe.send("connected")
         assert len(set(uuids)) == len(uuids), "Characteristic UUIDs must be unique"
 
-        for u, c in zip(uuids, callbacks):
+        for u  in  uuids:
             logger.info(f"Notifying {u}")
-            await client.start_notify(u, c)
+            await client.start_notify(u, callback)
 
-        await while_loop(pipe, wait_time, client, uuids, callbacks)
+        await while_loop(pipe, wait_time, client, uuids, callback)
         logger.info("Stopping notification...")
         try:
             for u in uuids:

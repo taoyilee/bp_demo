@@ -19,6 +19,9 @@ class RotationalDataQueue(list):
 
     def put(self, value):
         self[self._i] = value
+        _list = self[:self._i]
+        _list.sort(key=lambda x: x.time if x is not None else len(self) + 1)
+        self[:self._i] = _list
         if self._i == 0:
             self.head_updated_callback()
 
@@ -64,7 +67,7 @@ class CapDisplayDataQueue(RotationalDataQueue):
 
     def head_updated_callback(self):
         self._prev_min_time = self._min_time
-        self._min_time = self[0].time
+        self._min_time = self.time[0]
 
     @property
     def time(self):
@@ -81,6 +84,18 @@ class CapDisplayDataQueue(RotationalDataQueue):
     @property
     def cap(self):
         return np.array([d.cap for d in self if d is not None])
+
+    @property
+    def acc(self):
+        return np.array([d.acc for d in self if d is not None])
+
+    @property
+    def gyro(self):
+        return np.array([d.gyro for d in self if d is not None])
+
+    @property
+    def mag(self):
+        return np.array([d.mag for d in self if d is not None])
 
 
 class IMUDisplayDataQueue(RotationalDataQueue):
