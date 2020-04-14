@@ -11,10 +11,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg)
 from matplotlib.figure import Figure
-from matplotlib.lines import Line2D
 
 from uci_cbp_demo.bluetooth import SensorBoard
-from uci_cbp_demo.bluetooth.constants import DISPLAY_WINDOW, FS
+from uci_cbp_demo.bluetooth.constants import DISPLAY_WINDOW
 from uci_cbp_demo.datastructures import CapDisplayDataQueue, IMUDisplayDataQueue
 
 logger = logging.getLogger("bp_demo")
@@ -58,34 +57,35 @@ class GUI:
             self.root.destroy()
             logger.info("finish destroying root")
 
-    def __init__(self, datasource: "SensorBoard", queues, a=1, b=0, ch1=True, ch2=True):
+    def __init__(self, datasource: "SensorBoard", queues, a=1, b=0, ch1=True, ch2=True, addr="DC:4E:6D:9F:E3:BA"):
         self.a = a
         self.b = b
         self.datasource = datasource
         self.ch1 = ch1
         self.ch2 = ch2
         self.channel = int(ch1) + int(ch2)
-        _display_queue_size = int(DISPLAY_WINDOW * FS / self.channel)
 
-        self.display_queue = {"cap1": CapDisplayDataQueue(size=_display_queue_size),
-                              "cap2": CapDisplayDataQueue(size=_display_queue_size),
-                              "acc": IMUDisplayDataQueue(size=self.channel * _display_queue_size),
-                              "gyro": IMUDisplayDataQueue(size=self.channel * _display_queue_size),
-                              "mag": IMUDisplayDataQueue(size=self.channel * _display_queue_size),
+        self.display_queue = {"cap1": CapDisplayDataQueue(window_size=DISPLAY_WINDOW),
+                              "cap2": CapDisplayDataQueue(window_size=DISPLAY_WINDOW),
+                              "acc": IMUDisplayDataQueue(window_size=DISPLAY_WINDOW),
+                              "gyro": IMUDisplayDataQueue(window_size=DISPLAY_WINDOW),
+                              "mag": IMUDisplayDataQueue(window_size=DISPLAY_WINDOW),
                               }
         self.queues = queues
-        self.init_gui()
-
-    def init_gui(self, addr="DC:4E:6D:9F:E3:BA"):
         self.root = tkinter.Tk()
         self.root.wm_title("Continuous Blood Pressure")
-
+        self.caps = []
+        if self.ch1:
+            self.caps.append(1)
+        if self.ch2:
+            self.caps.append(2)
+        self.signals = [f'cap{c}' for c in self.caps]
+        self.signals.extend(['acc', 'gyro', 'mag'])
         self.mac_str_var = tkinter.StringVar()
         self.mac_str_var.set(addr)
         ws = self.root.winfo_screenwidth()
         hs = self.root.winfo_screenheight()
-        logger.info(f"Screen width  = {ws}")
-        logger.info(f"Screen height = {hs}")
+        logger.info(f"Screen WXH  = {ws}X{hs}")
         n_monitors = 2 if ws / hs >= 2 else 1
         dpi = 100
         logger.info(f"I think you have {n_monitors} monitors")
@@ -94,203 +94,85 @@ class GUI:
         self.root.geometry('%dx%d+%d+%d' % (w, h, x, y))
         self.fig = Figure(figsize=(w / dpi, (h - 40) / dpi), dpi=dpi)
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)  # A tk.DrawingArea.
-        if self.channel == 2:
-            self.ax_cap1 = plt.subplot2grid((5, 1), (0, 0), fig=self.fig)
-            self.ax_cap2 = plt.subplot2grid((5, 1), (1, 0), fig=self.fig)
 
-            self.ax_acc = plt.subplot2grid((5, 1), (2, 0), fig=self.fig)
-            self.ax_gyro = plt.subplot2grid((5, 1), (3, 0), fig=self.fig)
-            self.ax_mag = plt.subplot2grid((5, 1), (4, 0), fig=self.fig)
-        elif self.ch1:
-            self.ax_cap1 = plt.subplot2grid((4, 1), (0, 0), fig=self.fig)
-
-            self.ax_acc = plt.subplot2grid((4, 1), (1, 0), fig=self.fig)
-            self.ax_gyro = plt.subplot2grid((4, 1), (2, 0), fig=self.fig)
-            self.ax_mag = plt.subplot2grid((4, 1), (3, 0), fig=self.fig)
-        elif self.ch2:
-            self.ax_cap2 = plt.subplot2grid((4, 1), (0, 0), fig=self.fig)
-
-            self.ax_acc = plt.subplot2grid((4, 1), (1, 0), fig=self.fig)
-            self.ax_gyro = plt.subplot2grid((4, 1), (2, 0), fig=self.fig)
-            self.ax_mag = plt.subplot2grid((4, 1), (3, 0), fig=self.fig)
+        self.fs = {}
+        self.ax = {s: plt.subplot2grid((len(self.signals), 1), (i, 0), fig=self.fig)
+                   for i, s in enumerate(self.signals)}
         t = np.linspace(0, DISPLAY_WINDOW)
+        self.line = {f'cap{c}': self.ax[f'cap{c}'].plot(t, np.zeros_like(t))[0] for c in self.caps}
+        self.line.update({f"{s}_{o}": self.ax[s].plot(t, np.zeros_like(t), label=o.upper())[0]
+                          for s in set(self.signals) - {'cap1', 'cap2'}
+                          for o in ['x', 'y', 'z']})
+        y_label = {"cap1": f"Cap 1 (pF)", "cap2": f"Cap 2 (pF)", "acc": "Acc (G)", "gyro": "Gyro (dps X100)",
+                   "mag": "Mag (uT)"}
+        y_lim = {"cap1": (0, 8), "cap2": (0, 8), "acc": (-2, 2), "gyro": (-1, 1), "mag": (-80, 80)}
+        for s in set(self.signals) - {'cap1', 'cap2'}:
+            self.ax[s].legend(loc='upper right')
+        for s in set(self.signals):
+            self.ax[s].set_ylabel(y_label[s])
+            self.ax[s].set_ylim(*y_lim[s])
 
-        if self.ch1:
-            self.line_cap1 = self.ax_cap1.plot(t, np.zeros_like(t))[0]  # type:Line2D
-            self.fs_cap1 = self.ax_cap1.text(0.1, 1, f"--- Hz")
-            self.ax_cap1.set_xlim(0, DISPLAY_WINDOW)
-            self.ax_cap1.set_ylim(0, 8)
-            # self.ax_cap1.set_title("CAP CH1")
-            self.ax_cap1.grid()
-            self.ax_cap1.set_ylabel("Cap 1 (pF)")
-        if self.ch2:
-            self.line_cap2 = self.ax_cap2.plot(t, np.zeros_like(t))[0]  # type:Line2D
-            self.fs_cap2 = self.ax_cap2.text(0.1, 1, f"--- Hz")
-            self.ax_cap2.set_xlim(0, DISPLAY_WINDOW)
-            self.ax_cap2.set_ylim(0, 8)
-            # self.ax_cap2.set_title("CAP CH2")
-            self.ax_cap2.grid()
-            self.ax_cap2.set_ylabel("Cap 2 (pF)")
-
-        self.line_acc_x = self.ax_acc.plot(t, np.zeros_like(t), label="X")[0]  # type:Line2D
-        self.line_acc_y = self.ax_acc.plot(t, np.zeros_like(t), label="Y")[0]  # type:Line2D
-        self.line_acc_z = self.ax_acc.plot(t, np.zeros_like(t), label="Z")[0]  # type:Line2D
-        self.ax_acc.legend(loc='upper right')
-        self.fs_acc = self.ax_acc.text(0.1, 1, f"--- Hz")
-        self.ax_acc.set_xlim(0, DISPLAY_WINDOW)
-        self.ax_acc.set_ylim(-2, 2)
-        self.ax_acc.set_title("")
-        self.ax_acc.grid()
-        self.ax_acc.set_ylabel("Acc (G)")
-
-        self.line_gyro_x = self.ax_gyro.plot(t, np.zeros_like(t), label="X")[0]  # type:Line2D
-        self.line_gyro_y = self.ax_gyro.plot(t, np.zeros_like(t), label="Y")[0]  # type:Line2D
-        self.line_gyro_z = self.ax_gyro.plot(t, np.zeros_like(t), label="Z")[0]  # type:Line2D
-        self.fs_gyro = self.ax_gyro.text(0.1, 0.5, f"--- Hz")
-        self.ax_gyro.legend(loc='upper right')
-        self.ax_gyro.set_xlim(0, DISPLAY_WINDOW)
-        self.ax_gyro.set_ylim(-1, 1)
-        # self.ax_gyro.set_title("Gyroscope")
-        self.ax_gyro.grid()
-
-        self.ax_gyro.set_ylabel("Gyro (dps X100)")
-
-        self.line_mag_x = self.ax_mag.plot(t, np.zeros_like(t), label="X")[0]  # type:Line2D
-        self.line_mag_y = self.ax_mag.plot(t, np.zeros_like(t), label="Y")[0]  # type:Line2D
-        self.line_mag_z = self.ax_mag.plot(t, np.zeros_like(t), label="Z")[0]  # type:Line2D
-        self.fs_mag = self.ax_mag.text(0.1, 1, f"--- Hz")
-        self.ax_mag.legend(loc='upper right')
-        self.ax_mag.set_xlim(0, DISPLAY_WINDOW)
-        self.ax_mag.set_ylim(-100, 100)
-        # self.ax_mag.set_title("Magnetometer")
-        self.ax_mag.grid()
-        self.ax_mag.set_ylabel("Mag (uT)")
-        self.ax_mag.set_xlabel("Time (s)")
-
+            self.fs[s] = self.ax[s].text(0.1, y_lim[s][0], f"--- Hz")
+            self.ax[s].set_xlim(0, DISPLAY_WINDOW)
+            self.ax[s].grid()
+            self.ax[s].set_title("")
+            self.ax[s].set_xticks(range(0, 11))
+        self.ax['mag'].set_xlabel("Time (s)")
         self.timer = self.fig.canvas.new_timer(interval=1)
-        self.ax_cap1.set_xticks(range(0, 11))
-        self.ax_cap2.set_xticks(range(0, 11))
-        self.ax_acc.set_xticks(range(0, 11))
-        self.ax_gyro.set_xticks(range(0, 11))
-        self.ax_mag.set_xticks(range(0, 11))
-
-
         self.fig.subplots_adjust(hspace=0)
 
-        plt.setp(self.ax_cap1.get_xticklabels(), visible=False)
-        plt.setp(self.ax_cap2.get_xticklabels(), visible=False)
-        plt.setp(self.ax_acc.get_xticklabels(), visible=False)
-        plt.setp(self.ax_gyro.get_xticklabels(), visible=False)
+        for s in set(self.signals) - {'mag'}:
+            plt.setp(self.ax[s].get_xticklabels(), visible=False)
         self.redraw()
 
-    def _acc_redraw(self):
-        time = self.display_queue['acc'].time_plot
-        x = self.display_queue['acc'].x
-        self.line_acc_x.set_data(time, x)
-        y = self.display_queue['acc'].y
-        self.line_acc_y.set_data(time, y)
-        z = self.display_queue['acc'].z
-        self.line_acc_z.set_data(time, z)
+    def _redraw_signal(self, signal):
+        _t = self.display_queue[signal].time
 
-        if self.display_queue['acc'].non_empty > 10:
-            self.fs_acc.set_text(f"{1 / np.mean(time[1:] - time[:-1]):.1f} Hz "
-                                 f"({self.display_queue['acc'].non_empty} samples)")
-        # try:
-        #     self.ax_acc.set_xlim(0, max(max(time), DISPLAY_WINDOW))
-        #     # self.ax_acc.set_ylim(min(min(x), min(y), min(z)), max(max(x), max(y), max(z)))
-        # except ValueError:
-        #     pass
+        if isinstance(self.display_queue[signal], IMUDisplayDataQueue):
+            orientations = ['x', 'y', 'z']
+            for o in orientations:
+                value = getattr(self.display_queue[signal], o)
+                self.line[f"{signal}_{o}"].set_data(_t, value)
+        else:
+            value = self.display_queue[signal].cap
+            self.line[signal].set_data(_t, value)
 
-    def _gyro_redraw(self):
-        time = self.display_queue['gyro'].time_plot
-        x = 100 * self.display_queue['gyro'].x
-        self.line_gyro_x.set_data(time, x)
-        y = 100 * self.display_queue['gyro'].y
-        self.line_gyro_y.set_data(time, y)
-        z = 100 * self.display_queue['gyro'].z
-        self.line_gyro_z.set_data(time, z)
+        if self.display_queue[signal].non_empty > 10:
+            self.fs[signal].set_text(f"{1 / np.mean(_t[1:] - _t[:-1]):.1f} Hz "
+                                     f"({self.display_queue[signal].non_empty} samples)")
 
-        if self.display_queue['gyro'].non_empty > 10:
-            self.fs_gyro.set_text(f"{1 / np.mean(time[1:] - time[:-1]):.1f} Hz "
-                                  f"({self.display_queue['gyro'].non_empty} samples)")
-        # try:
-        #     self.ax_gyro.set_xlim(0, max(max(time), DISPLAY_WINDOW))
-        #     # self.ax_gyro.set_ylim(min(min(x), min(y), min(z)), max(max(x), max(y), max(z)))
-        # except ValueError:
-        #     pass
-
-    def _mag_redraw(self):
-        time = self.display_queue['mag'].time_plot
-        x = self.display_queue['mag'].x
-        self.line_mag_x.set_data(time, x)
-        y = self.display_queue['mag'].y
-        self.line_mag_y.set_data(time, y)
-        z = self.display_queue['mag'].z
-        self.line_mag_z.set_data(time, z)
-
-        if self.display_queue['mag'].non_empty > 10:
-            self.fs_mag.set_text(f"{1 / np.mean(time[1:] - time[:-1]):.1f} Hz "
-                                 f"({self.display_queue['mag'].non_empty} samples)")
-        # try:
-        #     self.ax_mag.set_xlim(0, max(max(time), DISPLAY_WINDOW))
-        #     # self.ax_mag.set_ylim(min(min(x), min(y), min(z)), max(max(x), max(y), max(z)))
-        # except ValueError:
-        #     pass
-
-    def _cap1_redraw(self):
         try:
-            while True:
-                d = self.queues['cap1'].get(block=False)
-                self.display_queue['cap1'].put(d)
-                self.display_queue['acc'].put(d.acc)
-                self.display_queue['gyro'].put(d.gyro)
-                self.display_queue['mag'].put(d.mag)
-        except Empty:
-            pass
-        time = self.display_queue['cap1'].time_plot
-        cap = self.display_queue['cap1'].cap
-        self.line_cap1.set_data(time, cap)
+            _min_time = min(_t)
+            _max_time = max(np.max(_t), DISPLAY_WINDOW)
+            self.ax[signal].set_xticks(np.arange(_min_time, _max_time + 1).astype(int))
+            self.ax[signal].set_xlim(_min_time, _max_time)
+            self.fs[signal].set_x(_min_time)
+        except ValueError:
+            logger.warning(f"{signal} time axis is empty?")
 
-        if self.display_queue['cap1'].non_empty > 10:
-            self.fs_cap1.set_text(f"{1 / np.mean(time[1:] - time[:-1]):.1f} Hz "
-                                  f"({self.display_queue['cap1'].non_empty} samples)")
-        # try:
-        #     self.ax_cap1.set_xlim(min(time), max(max(time), DISPLAY_WINDOW))
-        # except ValueError:
-        #     pass
-
-    def _cap2_redraw(self):
-        try:
-            while True:
-                d = self.queues['cap2'].get(block=False)
-                self.display_queue['cap2'].put(d)
-                self.display_queue['acc'].put(d.acc)
-                self.display_queue['gyro'].put(d.gyro)
-                self.display_queue['mag'].put(d.mag)
-        except Empty:
-            pass
-        time = self.display_queue['cap2'].time_plot
-        cap = self.display_queue['cap2'].cap
-        self.line_cap2.set_data(time, cap)
-        if self.display_queue['cap2'].non_empty > 2:
-            self.fs_cap2.set_text(f"{1 / np.mean(time[1:] - time[:-1]):.1f} Hz "
-                                  f"({self.display_queue['cap2'].non_empty} samples)")
-        # try:
-        #     self.ax_cap2.set_xlim(min(time), max(max(time), DISPLAY_WINDOW))
-        # except ValueError:
-        #     pass
+    def _empty_queue(self):
+        for c in self.caps:
+            try:
+                while True:
+                    d = self.queues[f'cap{c}'].get(block=False)
+                    self.display_queue[f'cap{c}'].put(d)
+                    self.display_queue['acc'].put(d.acc)
+                    d.gyro.x *= 100
+                    d.gyro.y *= 100
+                    d.gyro.z *= 100
+                    self.display_queue['gyro'].put(d.gyro)
+                    self.display_queue['mag'].put(d.mag)
+            except Empty:
+                pass
 
     def redraw(self):
-        if self.ch1:
-            self._cap1_redraw()
-        if self.ch2:
-            self._cap2_redraw()
-        self._acc_redraw()
-        self._gyro_redraw()
-        self._mag_redraw()
+        self._empty_queue()
+        for s in self.signals:
+            self._redraw_signal(s)
+
         self.fig.tight_layout(pad=0, h_pad=None, w_pad=None, rect=None)
         # self.fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
-        self.fig.subplots_adjust(hspace=0.1)
+        self.fig.subplots_adjust(hspace=0.1, right=0.99)
         self.canvas.draw()
 
     def start_gui(self, pipe):
