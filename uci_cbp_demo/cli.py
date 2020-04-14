@@ -6,6 +6,8 @@ from multiprocessing import Process, Pipe
 
 import click
 
+import uci_cbp_demo
+
 logger = logging.getLogger("bp_demo")
 console_handler = logging.StreamHandler()
 logger.setLevel(logging.INFO)
@@ -19,8 +21,8 @@ MOCK = False
 
 
 @click.group()
+@click.version_option(version=uci_cbp_demo.__version__)
 @click.option('--debug/--no-debug', help="Enable DEBUG mode", default=False)
-@click.option('--mock/--no-mock', help="Use mock data source instead of reading from Bluetooth", default=False)
 def cli(debug=False, mock=False):
     global DEBUG
     DEBUG = debug
@@ -73,55 +75,21 @@ def gui(a=1, b=0, ch1=True, ch2=True, addr=None):
 
 @cli.command()
 def scan():
-    import asyncio
-    from bleak import discover
-
-    async def run():
-        devices = await discover()
-        for d in devices:
-            logger.info(d)
-
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(run())
+    from uci_cbp_demo.bluetooth import scan, check_adaptor
+    if check_adaptor():
+        for mac in scan():
+            logger.info(f"{mac.name}: {mac.address}")
+    else:
+        logger.warning(f"Please check Bluetooth adaptor (powered off?)")
 
 
 @cli.command()
 @click.option('--addr', default=None)
 def list_char(addr):
-    import asyncio
-    from bleak import BleakClient
-
-    async def run(address, loop):
-        async with BleakClient(address, loop=loop) as client:
-            x = await client.is_connected()
-            logger.info("Connected: {0}".format(x))
-
-            for service in client.services:
-                logger.info("[Service] {0}: {1}".format(service.uuid, service.description))
-                for char in service.characteristics:
-                    if "read" in char.properties:
-                        try:
-                            value = bytes(await client.read_gatt_char(char.uuid))
-                        except Exception as e:
-                            value = str(e).encode()
-                    else:
-                        value = None
-                    logger.info(
-                        "\t[Characteristic] {0}: ({1}) | Name: {2}, Value: {3} ".format(
-                            char.uuid, ",".join(char.properties), char.description, value
-                        )
-                    )
-                    for descriptor in char.descriptors:
-                        value = await client.read_gatt_descriptor(descriptor.handle)
-                        logger.info(
-                            "\t\t[Descriptor] {0}: (Handle: {1}) | Value: {2} ".format(
-                                descriptor.uuid, descriptor.handle, bytes(value)
-                            )
-                        )
-
-    loop = asyncio.get_event_loop()
-    logger.info(f"Connecting to {addr}")
-    loop.run_until_complete(run(addr, loop))
+    from uci_cbp_demo.bluetooth import list_char
+    services = list_char(addr)
+    for s in services:
+        logger.info(s)
 
 
 if __name__ == "__main__":

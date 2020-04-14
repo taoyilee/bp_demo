@@ -13,4 +13,5 @@ pytest-runner==5.1
 numpy==1.18.1
 bleak==0.6.1
 pynsist==2.5
-pythonnet==2.4.0
+scipy==1.4.1
+matplotlib==3.2.1

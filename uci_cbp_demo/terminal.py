@@ -34,7 +34,7 @@ class TerminalManager:
                 pass
         else:
             time.sleep(20)
-        self.pipe.send("stop")
+        self.pipe.send(("STOP", None))
         logger.info("Restoring tty...")
         if platform.system() == "Linux":
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.term_settings)

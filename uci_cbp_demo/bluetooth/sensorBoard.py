@@ -18,23 +18,26 @@ class SensorBoard:
         self.pipe = pipe
 
     async def notify_cap1(self, loop, callbacks, wait_time=None):
-        await _start_notify_uuid(self.addr, loop, self.pipe, [CAP1_CHAR_UUID], callbacks, wait_time)
+        await _start_notify_uuid(self.addr, loop, self.pipe,
+                                 [CAP1_CHAR_UUID], callbacks, wait_time)
 
     async def notify_cap2(self, loop, callbacks, wait_time=None):
-        await _start_notify_uuid(self.addr, loop, self.pipe, [CAP2_CHAR_UUID], callbacks, wait_time)
+        await _start_notify_uuid(self.addr, loop, self.pipe,
+                                 [CAP2_CHAR_UUID], callbacks, wait_time)
 
     async def notify_both(self, loop, callbacks, wait_time=None):
-        await _start_notify_uuid(self.addr, loop, self.pipe, [CAP1_CHAR_UUID, CAP2_CHAR_UUID], callbacks, wait_time)
+        await _start_notify_uuid(self.addr, loop, self.pipe,
+                                 [CAP1_CHAR_UUID, CAP2_CHAR_UUID],
+                                 callbacks, wait_time)
 
     def start_cap1_notification(self, queues=None, wait_time=None):
-        callbacks = [CapCallback(v) for k, v in queues.items()] if queues is not None else [CapCallback()]
-        run_until_complete(self.notify_cap1, callbacks, wait_time)
+        callback = CapCallback(queue=queues)
+        run_until_complete(self.notify_cap1, callback, wait_time)
 
     def start_cap2_notification(self, queues=None, wait_time=None):
-        callbacks = [CapCallback(v) for k, v in queues.items()] if queues is not None else [CapCallback()]
-        run_until_complete(self.notify_cap2, callbacks, wait_time)
+        callback = CapCallback(queue=queues)
+        run_until_complete(self.notify_cap2, callback, wait_time)
 
     def start_cap_notification(self, queues=None, wait_time=None):
-        callbacks = [CapCallback(v) for k, v in queues.items()] if queues is not None \
-            else [CapCallback(), CapCallback()]
-        run_until_complete(self.notify_both, callbacks, wait_time)
+        callback = CapCallback(queue=queues)
+        run_until_complete(self.notify_both, callback, wait_time)
