@@ -76,12 +76,3 @@ MAC OS Notes
 ------------------
 1. OS X/macOS support via Core Bluetooth API, from at least version 10.11
 2. The macOS backend of Bleak is written with pyobjc directives for interfacing with Foundation and CoreBluetooth APIs. There are some values that pyobjc is not able to overwrite and thuse the corebleak framework was written to circumvent these issues. The most noticible difference between the other backends of bleak and this backend, is that CoreBluetooth doesn’t scan for other devices via MAC address. Instead, UUIDs are utilized that are often unique between the device that is scanning the the device that is being scanned.
-
-Credits
--------
-This package is co-developed with Wongi Baek and Joonkyu Seo.
-
-This package was created with Cookiecutter_ and the `audreyr/cookiecutter-pypackage`_ project template.
-
-.. _Cookiecutter: https://github.com/audreyr/cookiecutter
-.. _`audreyr/cookiecutter-pypackage`: https://github.com/audreyr/cookiecutter-pypackage
