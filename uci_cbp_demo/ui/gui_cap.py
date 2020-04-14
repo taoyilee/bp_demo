@@ -17,6 +17,7 @@ from uci_cbp_demo.bluetooth.constants import DISPLAY_WINDOW
 from uci_cbp_demo.datastructures import CapDisplayDataQueue, IMUDisplayDataQueue
 
 logger = logging.getLogger("bp_demo")
+import uci_cbp_demo
 
 
 class GUI:
@@ -83,7 +84,7 @@ class GUI:
                               }
         self.queues = queues
         self.root = tkinter.Tk()
-        self.root.wm_title("Continuous Blood Pressure")
+        self.root.wm_title(f"Continuous Blood Pressure {uci_cbp_demo.__version__}")
         self.caps = []
         if self.ch1:
             self.caps.append(1)
