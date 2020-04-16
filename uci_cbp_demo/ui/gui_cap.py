@@ -24,8 +24,18 @@ class PlotCanvas(FigureCanvasTkAgg):
     PIXELS_LEFT = 70
     PIXELS_DOWN = 50
 
-    def __init__(self, parent, dpi=100, **kwargs):
+    def __init__(self, parent, caller, queues, dpi=100, **kwargs):
         self.dpi = dpi
+        self.parent = parent
+        self.queues = queues
+        self.caller = caller
+        self.display_queue = {"cap1": CapDisplayDataQueue(window_size=DISPLAY_WINDOW),
+                              "cap2": CapDisplayDataQueue(window_size=DISPLAY_WINDOW),
+                              "acc": IMUDisplayDataQueue(window_size=DISPLAY_WINDOW),
+                              "gyro": IMUDisplayDataQueue(window_size=DISPLAY_WINDOW),
+                              "mag": IMUDisplayDataQueue(window_size=DISPLAY_WINDOW),
+                              }
+
         self.fig = Figure(dpi=dpi)
         FigureCanvasTkAgg.__init__(self, self.fig, master=parent)
         self.mpl_connect("resize_event", self.on_resize)
@@ -33,12 +43,21 @@ class PlotCanvas(FigureCanvasTkAgg):
         self.fs = {}
         self.ax = {}
         self.line = {}
+        self.make_axes(self.caller.signals)
+        self.autoscale = tkinter.IntVar()
+        self.autoscale.set(1)
+        self.timer.add_callback(self.redraw)
+        self.redraw()
 
     def on_resize(self, event):
         logger.debug(f"resize_event: {event.width} {event.height}")
         self.redraw()
 
     def redraw(self):
+        self._empty_queue()
+        for s in self.caller.signals:
+            self._redraw_signal(s)
+
         self.fig.tight_layout(pad=0, h_pad=None, w_pad=None, rect=None)
         width, height = self.get_width_height()
         self.fig.subplots_adjust(left=self.PIXELS_LEFT / width,
@@ -46,6 +65,54 @@ class PlotCanvas(FigureCanvasTkAgg):
                                  right=0.99, top=0.99, wspace=0.1, hspace=0.1)
 
         self.draw()
+
+    def _redraw_signal(self, signal):
+        _t = self.display_queue[signal].time
+
+        if isinstance(self.display_queue[signal], IMUDisplayDataQueue):
+            orientations = ['x', 'y', 'z']
+            for o in orientations:
+                value = getattr(self.display_queue[signal], o)
+                self.line[f"{signal}_{o}"].set_data(_t, value)
+        else:
+            value = self.display_queue[signal].cap
+            self.line[signal].set_data(_t, value)
+
+        if self.display_queue[signal].non_empty > 10:
+            self.fs[signal].set_text(f"{1 / np.mean(_t[1:] - _t[:-1]):.1f} Hz "
+                                     f"({self.display_queue[signal].non_empty} samples)")
+
+        try:
+            _min_time = min(_t)
+            _max_time = max(np.max(_t), DISPLAY_WINDOW)
+            self.ax[signal].set_xticks(np.arange(_min_time, _max_time + 1).astype(int))
+            self.ax[signal].set_xlim(_min_time, _max_time)
+            self.fs[signal].set_x(_min_time)
+            if "cap" in signal:
+                if self.autoscale.get() == 1:
+                    self.fs[signal].set_y(min(value))
+                    self.ax[signal].set_ylim(min(value), max(value))
+                else:
+                    self.fs[signal].set_y(0)
+                    self.ax[signal].set_ylim(0, 8)
+
+        except ValueError:
+            logger.warning(f"{signal} time axis is empty?")
+
+    def _empty_queue(self):
+        for c in [1, 2]:
+            try:
+                while True:
+                    d = self.queues[f'cap{c}'].get(block=False)
+                    self.display_queue[f'cap{c}'].put(d)
+                    self.display_queue['acc'].put(d.acc)
+                    d.gyro.x *= 100
+                    d.gyro.y *= 100
+                    d.gyro.z *= 100
+                    self.display_queue['gyro'].put(d.gyro)
+                    self.display_queue['mag'].put(d.mag)
+            except Empty:
+                pass
 
     def make_axes(self, signals):
         self.ax = {s: plt.subplot2grid((len(signals), 1), (i, 0), fig=self.fig)
@@ -78,6 +145,28 @@ class PlotCanvas(FigureCanvasTkAgg):
             plt.setp(self.ax[s].get_xticklabels(), visible=False)
 
         self.get_tk_widget().pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True, pady=0)
+
+
+class DACControl(tkinter.Frame):
+    def __init__(self, master, name, *args, **kwargs):
+        super(DACControl, self).__init__(master, *args, **kwargs)
+        self.label = tkinter.Label(master=self, text=name)
+        self.label.pack(side=tkinter.LEFT)
+        self._dac = tkinter.IntVar()
+        self._dac.set(0)
+
+        self.dac_value = tkinter.Entry(master=self, width=10, textvariable=self._dac, state="readonly")
+        self.dac_value.pack(side=tkinter.LEFT)
+        self.incr = tkinter.Button(master=self, text="+", width=1, command=self._incr)
+        self.incr.pack(side=tkinter.LEFT)
+        self.decr = tkinter.Button(master=self, text="-", width=1, command=self._decr)
+        self.decr.pack(side=tkinter.LEFT)
+
+    def _incr(self):
+        self._dac.set(min(self._dac.get() + 1, 0x7F))
+
+    def _decr(self):
+        self._dac.set(max(self._dac.get() - 1, 0))
 
 
 class GUI:
@@ -124,6 +213,8 @@ class GUI:
 
     def imu_toggle(self):
         _btn = getattr(self, f"button_imu")
+        if len(self.caps) == 0:
+            return
         if _btn.cget("relief") == "sunken":
             _btn.configure(relief="raised")
         else:
@@ -133,12 +224,14 @@ class GUI:
         self.canvas.redraw()
 
     def ch_toggle(self, channel, pipe: "Pipe"):
-        self.send_message(pipe, f"CH{channel}")
         _btn = getattr(self, f"button_ch{channel}")
         if _btn.cget("relief") == "sunken":
+            if len(self.caps) == 1:  # do not allow disabling both channels
+                return
             _btn.configure(relief="raised")
-        else:
+        else:  # attempt to disable a cap channel
             _btn.configure(relief="sunken")
+        self.send_message(pipe, f"CH{channel}")
         setattr(self, f"ch{channel}", not getattr(self, f"ch{channel}"))
         self.canvas.make_axes(self.signals)
         self.canvas.redraw()
@@ -176,13 +269,6 @@ class GUI:
         self.imu = True
         self.channel = int(ch1) + int(ch2)
 
-        self.display_queue = {"cap1": CapDisplayDataQueue(window_size=DISPLAY_WINDOW),
-                              "cap2": CapDisplayDataQueue(window_size=DISPLAY_WINDOW),
-                              "acc": IMUDisplayDataQueue(window_size=DISPLAY_WINDOW),
-                              "gyro": IMUDisplayDataQueue(window_size=DISPLAY_WINDOW),
-                              "mag": IMUDisplayDataQueue(window_size=DISPLAY_WINDOW),
-                              }
-        self.queues = queues
         self.root = tkinter.Tk()
         self.root.wm_title(f"Continuous Blood Pressure {uci_cbp_demo.__version__}")
         self.root.wm_minsize(640, 480)
@@ -197,9 +283,7 @@ class GUI:
         w, h = (ws * 0.9) / n_monitors, 0.8 * hs
         x, y = 10, 10
         self.root.geometry('%dx%d+%d+%d' % (w, h, x, y))
-        self.canvas = PlotCanvas(self.root)
-
-        self.canvas.make_axes(self.signals)
+        self.canvas = PlotCanvas(self.root, self, queues)
 
         # buttons
         self.button_quit = tkinter.Button(master=self.root, text="Quit", )
@@ -223,54 +307,14 @@ class GUI:
         self.button_connect.pack(side=tkinter.LEFT)
         self.button_scan = tkinter.Button(master=self.root, text="Scan")
         self.button_scan.pack(side=tkinter.LEFT)
-        self.canvas.timer.add_callback(self.redraw)
-        self.redraw()
 
-    def _redraw_signal(self, signal):
-        _t = self.display_queue[signal].time
+        self.ckb_autocap = tkinter.Checkbutton(master=self.root, text="AutoScale Cap", variable=self.canvas.autoscale)
+        self.ckb_autocap.pack(side=tkinter.LEFT)
 
-        if isinstance(self.display_queue[signal], IMUDisplayDataQueue):
-            orientations = ['x', 'y', 'z']
-            for o in orientations:
-                value = getattr(self.display_queue[signal], o)
-                self.canvas.line[f"{signal}_{o}"].set_data(_t, value)
-        else:
-            value = self.display_queue[signal].cap
-            self.canvas.line[signal].set_data(_t, value)
-
-        if self.display_queue[signal].non_empty > 10:
-            self.canvas.fs[signal].set_text(f"{1 / np.mean(_t[1:] - _t[:-1]):.1f} Hz "
-                                            f"({self.display_queue[signal].non_empty} samples)")
-
-        try:
-            _min_time = min(_t)
-            _max_time = max(np.max(_t), DISPLAY_WINDOW)
-            self.canvas.ax[signal].set_xticks(np.arange(_min_time, _max_time + 1).astype(int))
-            self.canvas.ax[signal].set_xlim(_min_time, _max_time)
-            self.canvas.fs[signal].set_x(_min_time)
-        except ValueError:
-            logger.warning(f"{signal} time axis is empty?")
-
-    def _empty_queue(self):
-        for c in [1, 2]:
-            try:
-                while True:
-                    d = self.queues[f'cap{c}'].get(block=False)
-                    self.display_queue[f'cap{c}'].put(d)
-                    self.display_queue['acc'].put(d.acc)
-                    d.gyro.x *= 100
-                    d.gyro.y *= 100
-                    d.gyro.z *= 100
-                    self.display_queue['gyro'].put(d.gyro)
-                    self.display_queue['mag'].put(d.mag)
-            except Empty:
-                pass
-
-    def redraw(self):
-        self._empty_queue()
-        for s in self.signals:
-            self._redraw_signal(s)
-        self.canvas.redraw()
+        self.dac_a_control = DACControl(self.root, "DAC A", padx=5)
+        self.dac_a_control.pack(side=tkinter.LEFT)
+        self.dac_b_control = DACControl(self.root, "DAC B", padx=5)
+        self.dac_b_control.pack(side=tkinter.LEFT)
 
     def start_gui(self, pipe):
         self.button_quit.configure(command=lambda: self.ask_quit(pipe))
