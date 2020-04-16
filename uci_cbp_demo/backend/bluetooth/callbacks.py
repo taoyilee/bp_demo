@@ -9,9 +9,9 @@ import sys
 
 import numpy as np
 
-from uci_cbp_demo.bluetooth.constants import CAP1_CHAR_UUID
-from uci_cbp_demo.bluetooth.constants import CLK_PERIOD
-from uci_cbp_demo.datastructures import IterableQueue
+from uci_cbp_demo.backend.bluetooth.constants import CAP1_CHAR_UUID
+from uci_cbp_demo.backend.bluetooth.constants import CLK_PERIOD
+from uci_cbp_demo.backend.datastructures import IterableQueue
 
 logger = logging.getLogger("bp_demo")
 
@@ -111,7 +111,7 @@ class CapCallback:
         data.mag.time = self.max_time
         data.gyro.time = self.max_time
         data.acc.time = self.max_time
-        logger.info(f"{data.channel} {old_time:.3f} {self.max_time:.3f}")
+        logger.debug(f"{data.channel} {old_time:.3f} {self.max_time:.3f}")
         if len(self.history) > 2:
             logger.debug(f"{data} fs = {1 / np.mean(self.history):.2f}")
         else:
