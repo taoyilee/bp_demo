@@ -39,5 +39,6 @@ class SensorBoard:
         run_until_complete(self.notify_cap2, callback, wait_time)
 
     def start_cap_notification(self, queues=None, wait_time=None):
+        logger.info("Setting Up Bluetooth")
         callback = CapCallback(queue=queues)
         run_until_complete(self.notify_both, callback, wait_time)

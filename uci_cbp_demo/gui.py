@@ -7,27 +7,17 @@ logger = logging.getLogger("bp_demo")
 
 
 def gui_noargs():
-    gui(a=1, b=0, ch1=True, ch2=True, addr="FA:21:46:BA:84:0F")
+    gui(a=1, b=0, ch1=True, ch2=True, addr="DC:4E:6D:9F:E3:BA")
 
 
-def gui(a=1, b=0, ch1=True, ch2=True, addr=None):
-    from uci_cbp_demo.ui.gui_cap import GUI
+def gui(a=1, b=0, ch1=True, ch2=True, addr="DC:4E:6D:9F:E3:BA"):
+    from uci_cbp_demo.ui.gui_cap import GUIController, GUIModel
     from uci_cbp_demo.bluetooth import SensorBoard
     pipe_1, pipe_2 = Pipe()
-    inter_process_queue = {"cap1": Queue(), "cap2": Queue(), "acc": Queue(), "gyro": Queue(), "mag": Queue()}
-
+    q = {"cap1": Queue(), "cap2": Queue(), "acc": Queue(), "gyro": Queue(), "mag": Queue()}
     sensor = SensorBoard(addr=addr, pipe=pipe_2)
-
-    if ch1 and ch2:
-        p = Process(target=sensor.start_cap_notification, args=(inter_process_queue,))
-    elif ch1:
-        p = Process(target=sensor.start_cap1_notification, args=(inter_process_queue,))
-    elif ch2:
-        p = Process(target=sensor.start_cap2_notification, args=(inter_process_queue,))
-    else:
-        raise ValueError("Either CH1 or CH2 must be enabled")
-    logger.info("Setting Up Bluetooth")
+    _gui = GUIController(GUIModel(q, pipe_1, a=a, b=b, ch1=ch1, ch2=ch2, addr=addr))
+    p = Process(target=sensor.start_cap_notification, args=(q,))
     p.start()
-    logger.info("Starting GUI")
-    GUI(sensor, inter_process_queue, a, b, ch1, ch2).start_gui(pipe_1)
+    _gui.start_gui()
     p.terminate()
