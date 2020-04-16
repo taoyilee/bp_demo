@@ -125,7 +125,7 @@ class PlotCanvas(FigureCanvasTkAgg):
                     self.ax[signal].set_ylim(0, 8)
 
         except ValueError:
-            logger.warning(f"{signal} time axis is empty?")
+            logger.debug(f"{signal} time axis is empty?")
 
     def make_axes(self, signals):
         self.ax = {s: plt.subplot2grid((len(signals), 1), (i, 0), fig=self.fig)

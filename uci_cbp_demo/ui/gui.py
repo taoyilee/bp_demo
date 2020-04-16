@@ -87,20 +87,23 @@ class GUIView(tkinter.Tk):
 
 class GUIModel:
 
-    def notify(self, message):
-        _msg = (message, None)
+    def notify(self, message, payload=None):
+        _msg = (message, payload)
         logger.info(f"Sending {_msg}")
         self.pipe.send(_msg)
 
     def start(self):
+        self.notify("START")
+
+    def connect(self):
         self.notify("CONNECT")
 
     def pause(self):
         self.notify("PAUSE")
 
-    def toggle_channel(self, ch):
-        self.notify(f"CH{ch}")
-        setattr(self, f"ch{ch}", not getattr(self, f"ch{ch}"))
+    def set_ch_status(self, ch, status):
+        self.notify(f"CH{ch}", status)
+        setattr(self, f"ch{ch}", status)
 
     def stop(self):
         self.notify("STOP")
@@ -112,9 +115,14 @@ class GUIModel:
     @mac_addr.setter
     def mac_addr(self, value):
         self._mac_addr = value
-        logger.info("Starting canvas update timer")
         self.pipe.send(("MAC", self.mac_addr))
-        self.start()
+
+    def init(self, mac_addr):
+        self.mac_addr = mac_addr
+        logger.info("Starting canvas update timer")
+        self.set_ch_status(1, True)
+        self.set_ch_status(2, True)
+        self.connect()
 
     @property
     def caps(self):
@@ -165,7 +173,13 @@ class GUIController:
         self._view.button_start.configure(state=ACTIVE)
 
     def connect(self):
-        self.model.mac_addr = self._view.mac_str_var.get()
+        self.model.init(self._view.mac_str_var.get())
+        self.model.pipe.poll(None)
+        c = self.model.pipe.recv()
+        if c[0] == "CONNECTED":
+            self.model.start()
+            self._view.canvas.timer.start()
+
         self._view.canvas.timer.start()
         self._view.button_connect.configure(state=DISABLED)
         self._view.button_pause.configure(state=ACTIVE)
@@ -185,14 +199,14 @@ class GUIController:
 
     def ch_toggle(self, channel):
         _btn = getattr(self._view, f"button_ch{channel}")
-        if _btn.cget("relief") == "sunken":
+        if _btn.cget("relief") == "sunken":  # attempt to disable a cap channel
             if len(self.model.caps) == 1:  # do not allow disabling both channels
                 return
+            self.model.set_ch_status(channel, False)
             _btn.configure(relief="raised")
-        else:  # attempt to disable a cap channel
+        else:  # attempt to enable a cap channel
+            self.model.set_ch_status(channel, True)
             _btn.configure(relief="sunken")
-        self.model.toggle_channel(channel)
-        setattr(self, f"ch{channel}", not getattr(self, f"ch{channel}"))
         self._view.canvas.make_axes(self.model.signals)
         self._view.canvas.tight_layout()
 
@@ -229,7 +243,7 @@ def main():
     q = {"cap1": Queue(), "cap2": Queue(), "acc": Queue(), "gyro": Queue(), "mag": Queue()}
     sensor = SensorBoard(addr="DC:4E:6D:9F:E3:BA", pipe=pipe_2)
     _gui = GUIController(GUIModel(q, pipe_1, a=1, b=0, ch1=True, ch2=True, addr="DC:4E:6D:9F:E3:BA"))
-    p = Process(target=sensor.start_cap_notification, args=(q,))
+    p = Process(target=sensor.start_session, args=(q,))
     p.start()
     _gui.start_gui()
     p.terminate()

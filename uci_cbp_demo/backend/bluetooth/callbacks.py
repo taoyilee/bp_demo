@@ -111,7 +111,7 @@ class CapCallback:
         data.mag.time = self.max_time
         data.gyro.time = self.max_time
         data.acc.time = self.max_time
-        logger.info(f"{data.channel} {old_time:.3f} {self.max_time:.3f}")
+        logger.debug(f"{data.channel} {old_time:.3f} {self.max_time:.3f}")
         if len(self.history) > 2:
             logger.debug(f"{data} fs = {1 / np.mean(self.history):.2f}")
         else:
