@@ -190,12 +190,14 @@ class GUIController:
         if len(self.model.caps) == 0:
             return
         if _btn.cget("relief") == "sunken":
+            self.model.imu=False
             _btn.configure(relief="raised")
         else:
+            self.model.imu = True
             _btn.configure(relief="sunken")
-        setattr(self, f"imu", not getattr(self, f"imu"))
+
         self._view.canvas.make_axes(self.model.signals)
-        self._view.redraw()
+        self._view.canvas.tight_layout()
 
     def ch_toggle(self, channel):
         _btn = getattr(self._view, f"button_ch{channel}")

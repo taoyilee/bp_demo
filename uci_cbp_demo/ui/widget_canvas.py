@@ -154,7 +154,7 @@ class PlotCanvas(FigureCanvasTkAgg):
 
         self.fig.subplots_adjust(hspace=0)
 
-        for s in set(signals) - {'mag'}:
+        for s in set(signals) - {signals[-1]}:
             plt.setp(self.ax[s].get_xticklabels(), visible=False)
 
         self.get_tk_widget().pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True, pady=0)
