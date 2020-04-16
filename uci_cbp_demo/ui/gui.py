@@ -1,15 +1,14 @@
 #  MIT License
 #  Copyright (C) Michael Tao-Yi Lee (taoyil AT UCI EDU)
-import logging
 import time
 import tkinter
+from multiprocessing import Pipe, Process, Queue
 from tkinter import messagebox, DISABLED, ACTIVE
 
 import uci_cbp_demo
-from uci_cbp_demo.ui.dac_control import DACControl, DACControlModel
-from uci_cbp_demo.ui.plot_canvas import PlotCanvas, PlotCanvasModel
-
-logger = logging.getLogger("bp_demo")
+from uci_cbp_demo.logging import logger
+from uci_cbp_demo.ui.widget_canvas import PlotCanvas, PlotCanvasModel
+from uci_cbp_demo.ui.widget_dac_control import DACControl, DACControlModel
 
 
 class GUIView(tkinter.Tk):
@@ -222,3 +221,15 @@ class GUIController:
     def start_gui(self):
         logger.info("Starting GUI")
         self._view.mainloop()
+
+
+def main():
+    from uci_cbp_demo.backend import SensorBoard
+    pipe_1, pipe_2 = Pipe()
+    q = {"cap1": Queue(), "cap2": Queue(), "acc": Queue(), "gyro": Queue(), "mag": Queue()}
+    sensor = SensorBoard(addr="DC:4E:6D:9F:E3:BA", pipe=pipe_2)
+    _gui = GUIController(GUIModel(q, pipe_1, a=1, b=0, ch1=True, ch2=True, addr="DC:4E:6D:9F:E3:BA"))
+    p = Process(target=sensor.start_cap_notification, args=(q,))
+    p.start()
+    _gui.start_gui()
+    p.terminate()

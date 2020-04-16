@@ -4,4 +4,4 @@ __author__ = """UCI cBP demo"""
 __email__ = 'taoyil@uci.edu'
 __version__ = '0.4.0'
 
-from .gui import gui_noargs
+from uci_cbp_demo.ui import main

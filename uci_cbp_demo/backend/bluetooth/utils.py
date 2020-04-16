@@ -43,7 +43,7 @@ def invalid_message(c):
     logger.warning(f"Invalid message: {c}")
 
 
-async def _start_notify_uuid(addr, loop, pipe: "Pipe", uuids, callback, wait_time=None):
+async def start_notify_uuid(addr, loop, pipe: "Pipe", uuids, callback, wait_time=None):
     connected = False
     while not connected:
         logger.info(f"Waiting for commands")

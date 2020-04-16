@@ -2,32 +2,21 @@
 # Copyright (C) Michael Tao-Yi Lee (taoyil AT UCI EDU)import sys
 import logging
 import sys
-from multiprocessing import Process, Pipe
 
 import click
 
 import uci_cbp_demo
-
-logger = logging.getLogger("bp_demo")
-console_handler = logging.StreamHandler()
-logger.setLevel(logging.INFO)
-console_handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+from uci_cbp_demo.logging import logger, console_handler
 
 DEBUG = False
-MOCK = False
 
 
 @click.group()
 @click.version_option(version=uci_cbp_demo.__version__)
 @click.option('--debug/--no-debug', help="Enable DEBUG mode", default=False)
-def cli(debug=False, mock=False):
+def cli(debug=False):
     global DEBUG
     DEBUG = debug
-    global MOCK
-    MOCK = mock
     if DEBUG:
         logger.setLevel(logging.DEBUG)
         console_handler.setLevel(logging.DEBUG)
@@ -39,43 +28,13 @@ def cli(debug=False, mock=False):
 @click.option('--ch1/--no-ch1', default=True)
 @click.option('--ch2/--no-ch2', default=True)
 def tui(addr=None, ch1=True, ch2=True):
-    from uci_cbp_demo.terminal import TerminalManager
-
-    from uci_cbp_demo.bluetooth import SensorBoard
-    pipe_1, pipe_2 = Pipe()
-    tm = TerminalManager(pipe_1)
-
-    sensor = SensorBoard(addr=addr, pipe=pipe_2)
-
-    if ch1 and ch2:
-        logger.info("Notifying CH1/CH2")
-        process = Process(target=sensor.start_cap_notification)
-    elif ch1:
-        logger.info("Notifying CH1")
-        process = Process(target=sensor.start_cap1_notification)
-    elif ch2:
-        logger.info("Notifying CH2")
-        process = Process(target=sensor.start_cap2_notification)
-    else:
-        raise ValueError("Either CH1 or CH2 must be enabled")
-    process.start()
-    tm.handle_session()
-
-
-@cli.command()
-@click.option('-a', default=1, help='Scaling coefficient')
-@click.option('-b', default=0, help='Shifting in Y')
-@click.option('--ch1/--no-ch1', default=True)
-@click.option('--ch2/--no-ch2', default=True)
-@click.option('--addr', help="Address (MAC: Windows/Linux; UUID: MacOSX)", default=None)
-def gui(a=1, b=0, ch1=True, ch2=True, addr=None):
-    from uci_cbp_demo.gui import gui
-    gui(a, b, ch1, ch2, addr)
+    from uci_cbp_demo.ui import tui_main
+    tui_main(addr, ch1, ch2)
 
 
 @cli.command()
 def scan():
-    from uci_cbp_demo.bluetooth import scan, check_adaptor
+    from uci_cbp_demo.backend.bluetooth import scan, check_adaptor
     if check_adaptor():
         for mac in scan():
             logger.info(f"{mac.name}: {mac.address}")
@@ -86,10 +45,16 @@ def scan():
 @cli.command()
 @click.option('--addr', default=None)
 def list_char(addr):
-    from uci_cbp_demo.bluetooth import list_char
+    from uci_cbp_demo.backend.bluetooth import list_char
     services = list_char(addr)
     for s in services:
         logger.info(s)
+
+
+@cli.command()
+def gui():
+    from uci_cbp_demo.ui import main
+    main()
 
 
 if __name__ == "__main__":

@@ -1,14 +1,12 @@
 #  MIT License
 #  Copyright (C) Michael Tao-Yi Lee (taoyil AT UCI EDU)
 
-# MIT License
-# Copyright (C) Michael Tao-Yi Lee (taoyil AT UCI EDU)import sys
 import logging
 import platform
 import sys
 import time
 
-from uci_cbp_demo.bluetooth.callbacks import is_data
+from uci_cbp_demo.backend.bluetooth.callbacks import is_data
 
 logger = logging.getLogger("bp_demo")
 if platform.system() == "Linux":

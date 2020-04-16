@@ -11,13 +11,13 @@ from matplotlib import pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
-from uci_cbp_demo.bluetooth.constants import DISPLAY_WINDOW
-from uci_cbp_demo.datastructures import CapDisplayDataQueue, IMUDisplayDataQueue
+from uci_cbp_demo.backend.bluetooth.constants import DISPLAY_WINDOW
+from uci_cbp_demo.backend.datastructures import CapDisplayDataQueue, IMUDisplayDataQueue
 
 logger = logging.getLogger("bp_demo")
 
 if TYPE_CHECKING:
-    from uci_cbp_demo.ui.gui_cap import GUIModel
+    from uci_cbp_demo.ui.gui import GUIModel
 
 
 class PlotCanvasModel:

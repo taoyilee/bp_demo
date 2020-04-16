@@ -9,9 +9,9 @@ import sys
 
 import numpy as np
 
-from uci_cbp_demo.bluetooth.constants import CAP1_CHAR_UUID
-from uci_cbp_demo.bluetooth.constants import CLK_PERIOD
-from uci_cbp_demo.datastructures import IterableQueue
+from uci_cbp_demo.backend.bluetooth.constants import CAP1_CHAR_UUID
+from uci_cbp_demo.backend.bluetooth.constants import CLK_PERIOD
+from uci_cbp_demo.backend.datastructures import IterableQueue
 
 logger = logging.getLogger("bp_demo")
 
