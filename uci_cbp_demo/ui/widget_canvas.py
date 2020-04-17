@@ -13,6 +13,7 @@ from matplotlib.figure import Figure
 
 from uci_cbp_demo.backend.bluetooth.constants import DISPLAY_WINDOW
 from uci_cbp_demo.backend.datastructures import CapDisplayDataQueue, IMUDisplayDataQueue
+from uci_cbp_demo.config import config
 
 logger = logging.getLogger("bp_demo")
 
@@ -72,7 +73,7 @@ class PlotCanvas(FigureCanvasTkAgg):
         self.line = {}
         self.make_axes(["cap1", "cap2", "acc", "gyro", "mag"])
         self.autoscale = tkinter.IntVar()
-        self.autoscale.set(1)
+        self.autoscale.set(config.plotting.autoscale_cap)
         self.tight_layout()
 
     def on_resize(self, event):
@@ -154,7 +155,7 @@ class PlotCanvas(FigureCanvasTkAgg):
 
         self.fig.subplots_adjust(hspace=0)
 
-        for s in set(signals) - {'mag'}:
+        for s in set(signals) - {signals[-1]}:
             plt.setp(self.ax[s].get_xticklabels(), visible=False)
 
         self.get_tk_widget().pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True, pady=0)

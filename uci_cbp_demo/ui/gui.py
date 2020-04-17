@@ -6,6 +6,7 @@ from multiprocessing import Pipe, Process, Queue
 from tkinter import messagebox, DISABLED, ACTIVE
 
 import uci_cbp_demo
+from uci_cbp_demo.config import config
 from uci_cbp_demo.logging import logger
 from uci_cbp_demo.ui.widget_canvas import PlotCanvas, PlotCanvasModel
 from uci_cbp_demo.ui.widget_dac_control import DACControl, DACControlModel
@@ -19,11 +20,12 @@ class GUIView(tkinter.Tk):
     def __init__(self):
         super(GUIView, self).__init__()
         self.model = None
+        self.configuration = None
         self.imu = True
         self.wm_title(self.TITLE)
         self.wm_minsize(self.MIN_WIDTH, self.MIN_HEIGHT)
         self.mac_str_var = tkinter.StringVar()
-        self.mac_str_var.set("")
+        self.mac_str_var.set(config.board.mac)
         ws = self.winfo_screenwidth()
         hs = self.winfo_screenheight()
         logger.info(f"Screen WXH  = {ws}X{hs}")
@@ -73,7 +75,8 @@ class GUIView(tkinter.Tk):
         self.ckb_autocap = tkinter.Checkbutton(master=self, text="AutoScale Cap", variable=self.canvas.autoscale)
         self.ckb_autocap.pack(side=tkinter.LEFT)
 
-        self.dac_model = {"A": DACControlModel("DAC A", 0), "B": DACControlModel("DAC B", 0)}
+        self.dac_model = {"A": DACControlModel("DAC A", config.board.dac_a),
+                          "B": DACControlModel("DAC B", config.board.dac_b)}
         self.dac_a_control = DACControl(self, self.dac_model["A"], padx=5, state=DISABLED)
         self.dac_a_control.pack(side=tkinter.LEFT)
         self.dac_b_control = DACControl(self, self.dac_model["B"], padx=5, state=DISABLED)
@@ -81,8 +84,13 @@ class GUIView(tkinter.Tk):
 
     def attach_model(self, model: "GUIModel"):
         self.model = model
+        logger.debug(f"attach_model {model.imu} {model.ch1} {model.ch2} {model.caps}")
+        self.button_imu.configure(relief="sunken" if model.imu else "raised")
+        self.button_ch1.configure(relief="sunken" if model.ch1 else "raised")
+        self.button_ch2.configure(relief="sunken" if model.ch2 else "raised")
         self.mac_str_var.set(model.mac_addr)
         self.canvas.attach_model(PlotCanvasModel(model))
+        self.canvas.make_axes(self.model.signals)
 
 
 class GUIModel:
@@ -120,8 +128,8 @@ class GUIModel:
     def init(self, mac_addr):
         self.mac_addr = mac_addr
         logger.info("Starting canvas update timer")
-        self.set_ch_status(1, True)
-        self.set_ch_status(2, True)
+        self.set_ch_status(1, self.ch1)
+        self.set_ch_status(2, self.ch2)
         self.connect()
 
     @property
@@ -140,13 +148,13 @@ class GUIModel:
             _signals.extend(['acc', 'gyro', 'mag'])
         return _signals
 
-    def __init__(self, queues, pipe, a=1, b=0, ch1=True, ch2=True, addr="DC:4E:6D:9F:E3:BA"):
+    def __init__(self, queues, pipe, a=1, b=0, ch1=None, ch2=None, addr="DC:4E:6D:9F:E3:BA"):
         self.a = a
         self.b = b
         self._mac_addr = addr
-        self.ch1 = ch1
-        self.ch2 = ch2
-        self.imu = True
+        self.ch1 = config.plotting.ch1_en if ch1 is None else ch1
+        self.ch2 = config.plotting.ch2_en if ch2 is None else ch2
+        self.imu = config.plotting.imu_en
         self.pipe = pipe
         self.queues = queues
 
@@ -173,6 +181,7 @@ class GUIController:
         self._view.button_start.configure(state=ACTIVE)
 
     def connect(self):
+        config.board.mac = self._view.mac_str_var.get()
         self.model.init(self._view.mac_str_var.get())
         self.model.pipe.poll(None)
         c = self.model.pipe.recv()
@@ -190,12 +199,19 @@ class GUIController:
         if len(self.model.caps) == 0:
             return
         if _btn.cget("relief") == "sunken":
+            self.model.imu = False
+            config.plotting.imu_en = False
             _btn.configure(relief="raised")
         else:
+            self.model.imu = True
+            config.plotting.imu_en = True
             _btn.configure(relief="sunken")
-        setattr(self, f"imu", not getattr(self, f"imu"))
+
         self._view.canvas.make_axes(self.model.signals)
-        self._view.redraw()
+        self._view.canvas.tight_layout()
+
+    def autoscale_cap(self):
+        config.plotting.autoscale_cap = self._view.canvas.autoscale.get()
 
     def ch_toggle(self, channel):
         _btn = getattr(self._view, f"button_ch{channel}")
@@ -203,9 +219,11 @@ class GUIController:
             if len(self.model.caps) == 1:  # do not allow disabling both channels
                 return
             self.model.set_ch_status(channel, False)
+            setattr(config.plotting, f"ch{channel}_en", False)
             _btn.configure(relief="raised")
         else:  # attempt to enable a cap channel
             self.model.set_ch_status(channel, True)
+            setattr(config.plotting, f"ch{channel}_en", True)
             _btn.configure(relief="sunken")
         self._view.canvas.make_axes(self.model.signals)
         self._view.canvas.tight_layout()
@@ -219,6 +237,12 @@ class GUIController:
             logger.info("finish destroying root")
 
     def __init__(self, model: "GUIModel"):
+
+        model.mac_addr = config.board.mac
+        model.ch1 = config.plotting.ch1_en
+        model.ch2 = config.plotting.ch2_en
+        model.imu = config.plotting.imu_en
+
         self.model = model
         self._view = GUIView()
         self._view.attach_model(self.model)
@@ -231,6 +255,7 @@ class GUIController:
         self._view.button_ch1.configure(command=lambda: self.ch_toggle(1))
         self._view.button_ch2.configure(command=lambda: self.ch_toggle(2))
         self._view.button_imu.configure(command=self.imu_toggle)
+        self._view.ckb_autocap.configure(command=self.autoscale_cap)
 
     def start_gui(self):
         logger.info("Starting GUI")
@@ -242,7 +267,7 @@ def main():
     pipe_1, pipe_2 = Pipe()
     q = {"cap1": Queue(), "cap2": Queue(), "acc": Queue(), "gyro": Queue(), "mag": Queue()}
     sensor = SensorBoard(addr="DC:4E:6D:9F:E3:BA", pipe=pipe_2)
-    _gui = GUIController(GUIModel(q, pipe_1, a=1, b=0, ch1=True, ch2=True, addr="DC:4E:6D:9F:E3:BA"))
+    _gui = GUIController(GUIModel(q, pipe_1, addr="DC:4E:6D:9F:E3:BA"))
     p = Process(target=sensor.start_session, args=(q,))
     p.start()
     _gui.start_gui()
