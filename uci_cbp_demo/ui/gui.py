@@ -11,6 +11,7 @@ from uci_cbp_demo.logging import logger
 from uci_cbp_demo.ui.widget_about import AboutViewSingleton
 from uci_cbp_demo.ui.widget_canvas import PlotCanvas, PlotCanvasModel
 from uci_cbp_demo.ui.widget_dac_control import DACControl, DACControlModel
+from uci_cbp_demo.ui.widget_scan import ScanViewSingleton
 
 
 class GUIView(tkinter.Tk):
@@ -20,7 +21,7 @@ class GUIView(tkinter.Tk):
 
     def __init__(self):
         super(GUIView, self).__init__()
-        self.model = None
+        self.model: GUIModel = None
         self.configuration = None
         self.imu = True
         self.wm_title(self.TITLE)
@@ -70,7 +71,7 @@ class GUIView(tkinter.Tk):
         self.mac_entry.pack(side=tkinter.LEFT)
         self.button_connect = tkinter.Button(master=self, text="Connect")
         self.button_connect.pack(side=tkinter.LEFT)
-        self.button_scan = tkinter.Button(master=self, text="Scan")
+        self.button_scan = tkinter.Button(master=self, text="Scan", command=lambda: ScanViewSingleton(self))
         self.button_scan.pack(side=tkinter.LEFT)
 
         self.ckb_autocap = tkinter.Checkbutton(master=self, text="AutoScale Cap", variable=self.canvas.autoscale)
@@ -85,16 +86,24 @@ class GUIView(tkinter.Tk):
 
     def attach_model(self, model: "GUIModel"):
         self.model = model
+        self.model.view = self
         logger.debug(f"attach_model {model.imu} {model.ch1} {model.ch2} {model.caps}")
         self.button_imu.configure(relief="sunken" if model.imu else "raised")
         self.button_ch1.configure(relief="sunken" if model.ch1 else "raised")
         self.button_ch2.configure(relief="sunken" if model.ch2 else "raised")
-        self.mac_str_var.set(model.mac_addr)
         self.canvas.attach_model(PlotCanvasModel(model))
         self.canvas.make_axes(self.model.signals)
 
 
 class GUIModel:
+
+    @property
+    def view(self):
+        return self._view
+
+    @view.setter
+    def view(self, value):
+        self._view = value
 
     def notify(self, message, payload=None):
         _msg = (message, payload)
@@ -125,6 +134,8 @@ class GUIModel:
     def mac_addr(self, value):
         self._mac_addr = value
         self.pipe.send(("MAC", self.mac_addr))
+        if self.view is not None:
+            self.view.mac_str_var.set(self.mac_addr)
 
     def init(self, mac_addr):
         self.mac_addr = mac_addr
@@ -152,6 +163,7 @@ class GUIModel:
     def __init__(self, queues, pipe, a=1, b=0, ch1=None, ch2=None, addr="DC:4E:6D:9F:E3:BA"):
         self.a = a
         self.b = b
+        self._view = None
         self._mac_addr = addr
         self.ch1 = config.plotting.ch1_en if ch1 is None else ch1
         self.ch2 = config.plotting.ch2_en if ch2 is None else ch2

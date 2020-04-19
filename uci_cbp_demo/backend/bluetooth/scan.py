@@ -30,12 +30,12 @@ def check_adaptor() -> bool:
 def scan() -> List[BLEDevice]:
     import asyncio
     from bleak import discover
-    mac_addresses = []
+    ble_devices = []
 
     async def run():
         devices = await discover()
-        mac_addresses.extend(devices)
+        ble_devices.extend(devices)
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(run())
-    return mac_addresses
+    return ble_devices
