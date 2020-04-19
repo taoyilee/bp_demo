@@ -8,6 +8,7 @@ from tkinter import messagebox, DISABLED, ACTIVE
 import uci_cbp_demo
 from uci_cbp_demo.config import config
 from uci_cbp_demo.logging import logger
+from uci_cbp_demo.ui.widget_about import AboutViewSingleton
 from uci_cbp_demo.ui.widget_canvas import PlotCanvas, PlotCanvasModel
 from uci_cbp_demo.ui.widget_dac_control import DACControl, DACControlModel
 
@@ -47,8 +48,8 @@ class GUIView(tkinter.Tk):
         self.menubar.add_cascade(label="Edit", menu=self.editmenu, state=DISABLED)
 
         self.aboutmenu = tkinter.Menu(master=self.menubar, tearoff=0)
-        self.aboutmenu.add_command(label="About this software")
-        self.menubar.add_cascade(label="About", menu=self.aboutmenu, state=DISABLED)
+        self.aboutmenu.add_command(label="About this software", command=lambda: AboutViewSingleton(self))
+        self.menubar.add_cascade(label="About", menu=self.aboutmenu, state=ACTIVE)
         self.config(menu=self.menubar)
 
         self.canvas = PlotCanvas(self)
