@@ -34,6 +34,13 @@ class BooleanAsIntDescriptor(Descriptor):
         return int(self.data)
 
 
+class StringDescriptor(Descriptor):
+    data = False
+
+    def __get__(self, instance, owner):
+        return str(self.data)
+
+
 class Section:
     @property
     def attributes(self):
@@ -78,35 +85,35 @@ class PlottingSection(Section):
 
 class BoardSection(Section):
     name = "board"
-    mac = Descriptor("DC:4E:6D:9F:E3:BA")
+    mac = StringDescriptor("DC:4E:6D:9F:E3:BA")
     dac_a = Descriptor(0)
     dac_b = Descriptor(0)
 
 
 class DefaultSection(Section):
     name = "DEFAULT"
-    log_dir = Descriptor(user_log_dir(uci_cbp_demo.__appname__, uci_cbp_demo.__author__))
-    data_dir = Descriptor(user_data_dir(uci_cbp_demo.__appname__, uci_cbp_demo.__author__))
+    log_dir = StringDescriptor(user_log_dir(uci_cbp_demo.__appname__, uci_cbp_demo.__author__))
+    data_dir = StringDescriptor(user_data_dir(uci_cbp_demo.__appname__, uci_cbp_demo.__author__))
 
 
 class Configuration:
     DEFAULT_CONFIG = Path(os.path.dirname(os.path.realpath(__file__))) / "config.ini"
     SECTIONS = ["DEFAULT", "plotting", "board"]
 
-    def __init__(self, config: "ConfigObj"):
-        self._config = config
-        logger.info(f"Init with: {config}")
+    def __init__(self, c: "ConfigObj"):
+        self._config = c
+        logger.info(f"Init with: {c}")
         self.plotting = PlottingSection(self)
         self.board = BoardSection(self)
         self.DEFAULT = DefaultSection(self)
         self.sections = {section: getattr(self, section) for section in self.SECTIONS}
-        for k, v in self.sections.items():
-            if k in self._config:
-                logger.info(f"[{k}] exist, updating with {self._config[k]}")
-                v.update(self._config[k])
+        for section_name, section in self.sections.items():
+            if section_name in self._config:
+                logger.info(f"[{section_name}] exist, updating with {self._config[section_name]}")
+                section.update(self._config[section_name])
             else:
-                logger.info(f"making empty [{k}]: {self.DEFAULT.to_dict()}")
-                self._config[k] = {}
+                logger.info(f"making empty [{section_name}]: {self.DEFAULT.to_dict()}")
+                self._config[section_name] = {}
 
         self.write()
         self.enable_autowrite()
@@ -134,14 +141,13 @@ class Configuration:
         if str(self._config.filename) == str(self.DEFAULT_CONFIG):
             raise ValueError(f"Cannot write into default configuration file")
         logger.info(f"Saving configuration to {self._config.filename}")
-        self._config["plotting"].update(self.plotting.to_dict())
-        self._config["board"].update(self.board.to_dict())
-        self._config["DEFAULT"].update(self.DEFAULT.to_dict())
+        for s in self.SECTIONS:
+            self._config[s].update(getattr(self, s).to_dict())
         self._config.write()
 
 
 config_dir = Path(user_config_dir(uci_cbp_demo.__appname__, uci_cbp_demo.__author__))
-config_dir.mkdir(exist_ok=True)
+config_dir.mkdir(exist_ok=True, parents=True)
 config_file = config_dir / "config.ini"
 
 if config_file.is_file():
