@@ -14,14 +14,17 @@ Basic usage is
 
     bumpversion [options] part [file]
 
-to bump major version use
+to bump version, use the following syntax
 
 .. code-block:: bash
 
-    bumpversion --current-version x.y.z major setup.py
+    bumpversion --current-version x.y.z {major,minor,patch} setup.py
 
-to bump minor version use
 
+
+Check dependency tree
+============================
 .. code-block:: bash
 
-    bumpversion --current-version x.y.z minor setup.py
+    pip install pipdeptree # if pipdeptree has not been installed
+    pipdeptree -fl

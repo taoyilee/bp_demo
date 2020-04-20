@@ -2,7 +2,7 @@
 
 __appname__ = """UCI cBP demo"""
 __email__ = 'taoyil@uci.edu'
-__version__ = '0.5.0'
+__version__ = '0.5.1'
 __author__ = "Michael Lee"
 
 from uci_cbp_demo.ui import main
