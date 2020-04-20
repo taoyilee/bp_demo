@@ -17,3 +17,4 @@ scipy==1.4.1
 matplotlib==3.2.1
 appdirs==1.4.3
 configobj==5.0.6
+pandas==1.0.3

@@ -3,7 +3,6 @@
 
 import logging
 import tkinter
-from queue import Empty
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -36,19 +35,12 @@ class PlotCanvasModel:
         return self.model.signals
 
     def empty_queue(self):
-        for c in [1, 2]:
-            try:
-                while True:
-                    d = self.model.queues[f'cap{c}'].get(block=False)
-                    self.display_queue[f'cap{c}'].put(d)
-                    self.display_queue['acc'].put(d.acc)
-                    d.gyro.x *= 100
-                    d.gyro.y *= 100
-                    d.gyro.z *= 100
-                    self.display_queue['gyro'].put(d.gyro)
-                    self.display_queue['mag'].put(d.mag)
-            except Empty:
-                pass
+        d = self.model.get_sample()
+        for di in d:
+            self.display_queue[f'cap{di.channel}'].put(di)
+            self.display_queue['acc'].put(di.acc)
+            self.display_queue['gyro'].put(di.gyro)
+            self.display_queue['mag'].put(di.mag)
 
 
 class PlotCanvas(FigureCanvasTkAgg):

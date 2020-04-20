@@ -3,14 +3,19 @@
 import time
 import tkinter
 from multiprocessing import Pipe, Process, Queue
+from queue import Empty
 from tkinter import messagebox, DISABLED, ACTIVE
+from typing import List
 
 import uci_cbp_demo
+from uci_cbp_demo.backend import FileExporter, FileExporterConf
+from uci_cbp_demo.backend.bluetooth import CapData
 from uci_cbp_demo.config import config
 from uci_cbp_demo.logging import logger
 from uci_cbp_demo.ui.widget_about import AboutViewSingleton
 from uci_cbp_demo.ui.widget_canvas import PlotCanvas, PlotCanvasModel
 from uci_cbp_demo.ui.widget_dac_control import DACControl, DACControlModel
+from uci_cbp_demo.ui.widget_preferences import PreferencesViewSingleton
 from uci_cbp_demo.ui.widget_scan import ScanViewSingleton
 
 
@@ -22,7 +27,6 @@ class GUIView(tkinter.Tk):
     def __init__(self):
         super(GUIView, self).__init__()
         self.model: GUIModel = None
-        self.configuration = None
         self.imu = True
         self.wm_title(self.TITLE)
         self.wm_minsize(self.MIN_WIDTH, self.MIN_HEIGHT)
@@ -45,8 +49,8 @@ class GUIView(tkinter.Tk):
         self.menubar.add_cascade(label="File", menu=self.filemenu, state=DISABLED)
 
         self.editmenu = tkinter.Menu(master=self.menubar, tearoff=0)
-        self.editmenu.add_command(label="UI Preferences")
-        self.menubar.add_cascade(label="Edit", menu=self.editmenu, state=DISABLED)
+        self.editmenu.add_command(label="UI Preferences", command=lambda: PreferencesViewSingleton(self))
+        self.menubar.add_cascade(label="Edit", menu=self.editmenu, state=ACTIVE)
 
         self.aboutmenu = tkinter.Menu(master=self.menubar, tearoff=0)
         self.aboutmenu.add_command(label="About this software", command=lambda: AboutViewSingleton(self))
@@ -87,7 +91,6 @@ class GUIView(tkinter.Tk):
     def attach_model(self, model: "GUIModel"):
         self.model = model
         self.model.view = self
-        logger.debug(f"attach_model {model.imu} {model.ch1} {model.ch2} {model.caps}")
         self.button_imu.configure(relief="sunken" if model.imu else "raised")
         self.button_ch1.configure(relief="sunken" if model.ch1 else "raised")
         self.button_ch2.configure(relief="sunken" if model.ch2 else "raised")
@@ -125,6 +128,7 @@ class GUIModel:
 
     def stop(self):
         self.notify("STOP")
+        self.remove_exporter()
 
     @property
     def mac_addr(self):
@@ -139,7 +143,6 @@ class GUIModel:
 
     def init(self, mac_addr):
         self.mac_addr = mac_addr
-        logger.info("Starting canvas update timer")
         self.set_ch_status(1, self.ch1)
         self.set_ch_status(2, self.ch2)
         self.connect()
@@ -153,6 +156,25 @@ class GUIModel:
             _caps.append(2)
         return _caps
 
+    def pop_queue(self, c) -> CapData:
+        try:
+            d = self.queues[f'cap{c}'].get(block=False)  # type:CapData
+            for orientation in ["x", "y", "z"]:
+                setattr(d.gyro, orientation, 100 * getattr(d.gyro, orientation))
+            return d
+        except Empty:
+            pass
+
+    def get_sample(self) -> List[CapData]:
+        _return = []
+        for i in range(40):
+            for ch in [1, 2]:
+                new_data = self.pop_queue(ch)
+                if new_data is not None:
+                    self._exporter.put(new_data)
+                    _return.append(new_data)
+        return _return
+
     @property
     def signals(self):
         _signals = [f'cap{c}' for c in self.caps]
@@ -164,12 +186,19 @@ class GUIModel:
         self.a = a
         self.b = b
         self._view = None
+        self._exporter: FileExporter = None
         self._mac_addr = addr
         self.ch1 = config.plotting.ch1_en if ch1 is None else ch1
         self.ch2 = config.plotting.ch2_en if ch2 is None else ch2
         self.imu = config.plotting.imu_en
         self.pipe = pipe
         self.queues = queues
+
+    def attach_exporter(self, exporter: "FileExporter"):
+        self._exporter = exporter
+
+    def remove_exporter(self):
+        self._exporter = None
 
 
 class GUIController:
@@ -178,6 +207,7 @@ class GUIController:
         self.model.start()
         self._view.canvas.timer.start()
         self._view.button_connect.configure(state=DISABLED)
+        self._view.button_scan.configure(state=DISABLED)
         self._view.button_start.configure(state=DISABLED)
         self._view.button_pause.configure(state=ACTIVE)
 
@@ -186,6 +216,7 @@ class GUIController:
         self._view.canvas.timer.stop()
         self._view.button_pause.configure(state=DISABLED)
         self._view.button_start.configure(state=ACTIVE)
+        self._view.mac_entry.configure(state=DISABLED)
 
     def stop(self):
         self.model.stop()
@@ -195,17 +226,13 @@ class GUIController:
 
     def connect(self):
         config.board.mac = self._view.mac_str_var.get()
+        self.exporter.new_session()
+        self.model.attach_exporter(self.exporter)
         self.model.init(self._view.mac_str_var.get())
         self.model.pipe.poll(None)
         c = self.model.pipe.recv()
         if c[0] == "CONNECTED":
-            self.model.start()
-            self._view.canvas.timer.start()
-
-        self._view.canvas.timer.start()
-        self._view.button_connect.configure(state=DISABLED)
-        self._view.button_pause.configure(state=ACTIVE)
-        self._view.mac_entry.configure(state=DISABLED)
+            self.start()
 
     def imu_toggle(self):
         _btn = getattr(self._view, f"button_imu")
@@ -255,7 +282,10 @@ class GUIController:
         model.ch1 = config.plotting.ch1_en
         model.ch2 = config.plotting.ch2_en
         model.imu = config.plotting.imu_en
-
+        from appdirs import user_data_dir
+        _fe_conf = FileExporterConf()
+        _fe_conf.app_data_directory = user_data_dir(uci_cbp_demo.__appname__, uci_cbp_demo.__author__)
+        self.exporter = FileExporter(_fe_conf)
         self.model = model
         self._view = GUIView()
         self._view.attach_model(self.model)

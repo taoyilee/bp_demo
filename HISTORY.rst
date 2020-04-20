@@ -19,3 +19,9 @@ History
 0.2 (2020-02-17)
 ------------------
 * Support 2 channel operation and new board
+
+0.5.0 (2020-04-19)
+--------------------
+* Supports waveform export
+* Allows searching for devices from GUI
+* GUI settings persistence

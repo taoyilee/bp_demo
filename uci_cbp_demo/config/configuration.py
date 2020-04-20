@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from appdirs import user_config_dir
+from appdirs import user_config_dir, user_log_dir, user_data_dir
 from configobj import ConfigObj
 
 import uci_cbp_demo
@@ -14,18 +14,16 @@ class Descriptor:
     data = None
 
     def __init__(self, default):
-        self.default = default
-
+        self.write = False
+        self.data = default
         self.parent = None
 
     def __get__(self, instance, owner):
         return self.data
 
     def __set__(self, instance, value):
-        logger.info(f"value updated: {value}")
         self.data = value
-        if instance.parent is not None:
-            logger.info(f"parent written")
+        if self.write and instance.parent is not None:
             instance.parent.write()
 
 
@@ -39,9 +37,11 @@ class BooleanAsIntDescriptor(Descriptor):
 class Section:
     @property
     def attributes(self):
-        return set(self.__class__.__dict__.keys()) - {'__doc__', '__module__'}
+        return set(self.__class__.__dict__.keys()) - {'__doc__', '__module__', 'name'}
 
     def to_dict(self):
+        aa = {k: getattr(self, k) for k in self.attributes}
+        logger.info(f"{self.name} {self.attributes} {aa}")
         return {k: getattr(self, k) for k in self.attributes if getattr(self, k) is not None}
 
     def __init__(self, parent: "Configuration"):
@@ -49,6 +49,10 @@ class Section:
         self.parent = parent
         for k in self.attributes:
             getattr(self, k + "_descriptor").parent = self.parent
+
+    def enable_autowrite(self):
+        for k in self.attributes:
+            getattr(self, k + "_descriptor").write = True
 
     def __getattribute__(self, key):
         if "_descriptor" in key:
@@ -61,11 +65,11 @@ class Section:
     def update(self, newdata):
         for key, value in newdata.items():
             if key != "parent":
-                logger.info(f"{key} -> {value}")
                 setattr(self, key, value)
 
 
 class PlottingSection(Section):
+    name = "plotting"
     imu_en = BooleanAsIntDescriptor(True)
     ch1_en = BooleanAsIntDescriptor(True)
     ch2_en = BooleanAsIntDescriptor(True)
@@ -73,22 +77,43 @@ class PlottingSection(Section):
 
 
 class BoardSection(Section):
+    name = "board"
     mac = Descriptor("DC:4E:6D:9F:E3:BA")
     dac_a = Descriptor(0)
     dac_b = Descriptor(0)
 
 
+class DefaultSection(Section):
+    name = "DEFAULT"
+    log_dir = Descriptor(user_log_dir(uci_cbp_demo.__appname__, uci_cbp_demo.__author__))
+    data_dir = Descriptor(user_data_dir(uci_cbp_demo.__appname__, uci_cbp_demo.__author__))
+
+
 class Configuration:
     DEFAULT_CONFIG = Path(os.path.dirname(os.path.realpath(__file__))) / "config.ini"
+    SECTIONS = ["DEFAULT", "plotting", "board"]
 
     def __init__(self, config: "ConfigObj"):
         self._config = config
         logger.info(f"Init with: {config}")
         self.plotting = PlottingSection(self)
         self.board = BoardSection(self)
-        self.plotting.update(config["plotting"])
-        self.board.update(config["board"])
+        self.DEFAULT = DefaultSection(self)
+        self.sections = {section: getattr(self, section) for section in self.SECTIONS}
+        for k, v in self.sections.items():
+            if k in self._config:
+                logger.info(f"[{k}] exist, updating with {self._config[k]}")
+                v.update(self._config[k])
+            else:
+                logger.info(f"making empty [{k}]: {self.DEFAULT.to_dict()}")
+                self._config[k] = {}
+
         self.write()
+        self.enable_autowrite()
+
+    def enable_autowrite(self):
+        for k, v in self.sections.items():
+            v.enable_autowrite()
 
     @classmethod
     def from_file(cls, filename):
@@ -98,7 +123,7 @@ class Configuration:
         return new_instance
 
     @classmethod
-    def default(cls, filename):
+    def default(cls, filename=None):
         logger.info(f"Loaded DEFAULT configuration from {str(cls.DEFAULT_CONFIG)}")
         loaded = ConfigObj(str(cls.DEFAULT_CONFIG))
         loaded.filename = filename
@@ -111,6 +136,7 @@ class Configuration:
         logger.info(f"Saving configuration to {self._config.filename}")
         self._config["plotting"].update(self.plotting.to_dict())
         self._config["board"].update(self.board.to_dict())
+        self._config["DEFAULT"].update(self.DEFAULT.to_dict())
         self._config.write()
 
 

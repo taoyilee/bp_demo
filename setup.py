@@ -11,7 +11,7 @@ with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
 requirements = ['Click>=7.0', 'numpy==1.18.1', 'matplotlib==3.2.1', 'configobj==5.0.6', 'appdirs==1.4.3',
-                'scipy==1.4.1', 'bleak==0.6.1']
+                'scipy==1.4.1', 'bleak==0.6.1', 'pandas==1.0.3']
 
 setup_requirements = ['pytest-runner', ]
 
@@ -47,6 +47,6 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/taoyilee/bp_demo',
-    version='0.4.0',
+    version='0.5.0',
     zip_safe=False,
 )

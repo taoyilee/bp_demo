@@ -68,6 +68,13 @@ class CapData:
     def __repr__(self):
         return f"CH{self.channel} {self.cap:.3f} pF @ {1000 * self.time:.2f} ms"
 
+    def to_dict(self):
+        return {"time": self.time, "cap1": self.cap if self.channel == 1 else None,
+                "cap2": self.cap if self.channel == 2 else None,
+                "accx": self.acc.x, "accy": self.acc.y, "accz": self.acc.z,
+                "gyrox": self.gyro.x, "gyroy": self.gyro.y, "gyroz": self.gyro.z,
+                "magx": self.mag.x, "magy": self.mag.y, "magz": self.mag.z}
+
 
 def is_data():
     s = select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], [])
