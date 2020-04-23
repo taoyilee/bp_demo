@@ -119,10 +119,12 @@ class CapCallback:
         data.gyro.time = self.max_time
         data.acc.time = self.max_time
         logger.debug(f"{data.channel} {old_time:.3f} {self.max_time:.3f}")
+
         if len(self.history) > 2:
             logger.debug(f"{data} fs = {1 / np.mean(self.history):.2f}")
         else:
             logger.debug(f"{data}")
+
         if self.queue is not None:
             self.queue[f"cap{data.channel}"].put(data)
         return data, sender

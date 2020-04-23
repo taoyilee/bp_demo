@@ -14,7 +14,7 @@ from uci_cbp_demo.config import config
 from uci_cbp_demo.logging import logger
 from uci_cbp_demo.ui.widget_about import AboutViewSingleton
 from uci_cbp_demo.ui.widget_canvas import PlotCanvas, PlotCanvasModel
-from uci_cbp_demo.ui.widget_dac_control import DACControl, DACControlModel
+from uci_cbp_demo.ui.widget_dac_control import DACControl
 from uci_cbp_demo.ui.widget_preferences import PreferencesViewSingleton
 from uci_cbp_demo.ui.widget_scan import ScanViewSingleton
 
@@ -24,9 +24,12 @@ class GUIView(tkinter.Tk):
     MIN_WIDTH = 640
     MIN_HEIGHT = 480
 
-    def __init__(self):
+    def __init__(self, model: "GUIModel"):
         super(GUIView, self).__init__()
-        self.model: GUIModel = None
+        self.model: GUIModel = model
+        self.model = model
+        self.model.view = self
+
         self.imu = True
         self.wm_title(self.TITLE)
         self.wm_minsize(self.MIN_WIDTH, self.MIN_HEIGHT)
@@ -57,14 +60,18 @@ class GUIView(tkinter.Tk):
         self.menubar.add_cascade(label="About", menu=self.aboutmenu, state=ACTIVE)
         self.config(menu=self.menubar)
 
-        self.canvas = PlotCanvas(self)
+        self.canvas = PlotCanvas(self, PlotCanvasModel(model))
+        self.canvas.make_axes(self.model.signals)
         # buttons
-        self.button_ch1 = tkinter.Button(master=self, text="CH 1", state=ACTIVE, relief="sunken")
+        self.button_ch1 = tkinter.Button(master=self, text="CH 1", state=ACTIVE,
+                                         relief="sunken" if model.ch1 else "raised")
         self.button_ch1.pack(side=tkinter.LEFT)
-        self.button_ch2 = tkinter.Button(master=self, text="CH 2", state=ACTIVE, relief="sunken")
+        self.button_ch2 = tkinter.Button(master=self, text="CH 2", state=ACTIVE,
+                                         relief="sunken" if model.ch2 else "raised")
         self.button_ch2.pack(side=tkinter.LEFT)
 
-        self.button_imu = tkinter.Button(master=self, text="IMU", state=ACTIVE, relief="sunken")
+        self.button_imu = tkinter.Button(master=self, text="IMU", state=ACTIVE,
+                                         relief="sunken" if model.imu else "raised")
         self.button_imu.pack(side=tkinter.LEFT)
 
         self.button_start = tkinter.Button(master=self, text="Start", state=DISABLED)
@@ -81,24 +88,31 @@ class GUIView(tkinter.Tk):
         self.ckb_autocap = tkinter.Checkbutton(master=self, text="AutoScale Cap", variable=self.canvas.autoscale)
         self.ckb_autocap.pack(side=tkinter.LEFT)
 
-        self.dac_model = {"A": DACControlModel("DAC A", config.board.dac_a),
-                          "B": DACControlModel("DAC B", config.board.dac_b)}
-        self.dac_a_control = DACControl(self, self.dac_model["A"], padx=5, state=DISABLED)
+        self.dac_a_control = DACControl(self, self.model, "(+)", "1", padx=5, state=ACTIVE)
         self.dac_a_control.pack(side=tkinter.LEFT)
-        self.dac_b_control = DACControl(self, self.dac_model["B"], padx=5, state=DISABLED)
+        self.dac_b_control = DACControl(self, self.model, "(-)", "2", padx=5, state=ACTIVE)
         self.dac_b_control.pack(side=tkinter.LEFT)
-
-    def attach_model(self, model: "GUIModel"):
-        self.model = model
-        self.model.view = self
-        self.button_imu.configure(relief="sunken" if model.imu else "raised")
-        self.button_ch1.configure(relief="sunken" if model.ch1 else "raised")
-        self.button_ch2.configure(relief="sunken" if model.ch2 else "raised")
-        self.canvas.attach_model(PlotCanvasModel(model))
-        self.canvas.make_axes(self.model.signals)
 
 
 class GUIModel:
+
+    @property
+    def dac1(self):
+        return config.board.dac1
+
+    @property
+    def dac2(self):
+        return config.board.dac2
+
+    @dac1.setter
+    def dac1(self, value):
+        self.notify("DAC1", value)
+        config.board.dac1 = value
+
+    @dac2.setter
+    def dac2(self, value):
+        self.notify("DAC2", value)
+        config.board.dac2 = value
 
     @property
     def view(self):
@@ -145,6 +159,8 @@ class GUIModel:
         self.mac_addr = mac_addr
         self.set_ch_status(1, self.ch1)
         self.set_ch_status(2, self.ch2)
+        self.notify("DAC1", self.dac1)
+        self.notify("DAC2", self.dac2)
         self.connect()
 
     @property
@@ -232,6 +248,7 @@ class GUIController:
         self.model.pipe.poll(None)
         c = self.model.pipe.recv()
         if c[0] == "CONNECTED":
+            logger.info("Bluetooth connected received by GUI")
             self.start()
 
     def imu_toggle(self):
@@ -287,8 +304,8 @@ class GUIController:
         _fe_conf.app_data_directory = user_data_dir(uci_cbp_demo.__appname__, uci_cbp_demo.__author__)
         self.exporter = FileExporter(_fe_conf)
         self.model = model
-        self._view = GUIView()
-        self._view.attach_model(self.model)
+        self._view = GUIView(self.model)
+
         self._view.protocol("WM_DELETE_WINDOW", self.ask_quit)
 
         self._view.button_start.configure(command=self.start)

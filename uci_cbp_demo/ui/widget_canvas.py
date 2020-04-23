@@ -48,18 +48,15 @@ class PlotCanvas(FigureCanvasTkAgg):
     PIXELS_DOWN = 50
     DPI = 100
 
-    def attach_model(self, model: "PlotCanvasModel"):
-        self.model = model
-        self.timer.add_callback(self.update_plot)
-
-    def __init__(self, parent, **kwargs):
+    def __init__(self, parent, model: "PlotCanvasModel"):
         self.fig = Figure(dpi=self.DPI)
         FigureCanvasTkAgg.__init__(self, self.fig, master=parent)
-        self.model = None  # type: PlotCanvasModel
+        self.model = model
         self.parent = parent
 
         self.mpl_connect("resize_event", self.on_resize)
         self.timer = self.new_timer(interval=1)
+        self.timer.add_callback(self.update_plot)
         self.fs = {}
         self.ax = {}
         self.line = {}
@@ -131,7 +128,7 @@ class PlotCanvas(FigureCanvasTkAgg):
                           for o in ['x', 'y', 'z']})
         y_label = {"cap1": f"Cap 1 (pF)", "cap2": f"Cap 2 (pF)", "acc": "Acc (G)", "gyro": "Gyro (dps X100)",
                    "mag": "Mag (uT)"}
-        y_lim = {"cap1": (0, 8), "cap2": (0, 8), "acc": (-2, 2), "gyro": (-1, 1), "mag": (-80, 80)}
+        y_lim = {"cap1": (0, 8), "cap2": (0, 8), "acc": (-2, 2), "gyro": (-1, 1), "mag": (-10, 10)}
         for s in set(signals) - {'cap1', 'cap2'}:
             self.ax[s].legend(loc='upper right')
         for s in set(signals):

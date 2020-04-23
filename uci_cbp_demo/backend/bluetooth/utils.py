@@ -17,6 +17,24 @@ class SensorState:
         self._ch2_active = False
         self._ch1_enabled = False
         self._ch2_enabled = False
+        self._dac1 = 0
+        self._dac2 = 0
+
+    @property
+    def dac1(self):
+        return [self._dac1]
+
+    @property
+    def dac2(self):
+        return [self._dac2]
+
+    @dac1.setter
+    def dac1(self, value):
+        self._dac1 = int(value)
+
+    @dac2.setter
+    def dac2(self, value):
+        self._dac2 = int(value)
 
     def connected(self):
         self._session_connected = True
@@ -92,45 +110,40 @@ async def while_loop(pipe, state, wait_time=None, client=None, callback=None):
     else:
         while True:
             if pipe.poll():
-                message = pipe.recv()
-                logger.info(f"Message: {message} received, {state}")
-                if state.ACTIVE and message[0] in ["STOP", "PAUSE"]:
+                command, value = pipe.recv()
+                logger.info(f"Message: {command} received")
+                if state.ACTIVE and command in ["STOP", "PAUSE"]:
                     for c in state.caps_active:
                         logger.info(f"stopping notification of {UUID[f'cap{c}']}")
                         await client.stop_notify(UUID[f'cap{c}'])
                     state.stop()
 
-                elif state.PAUSED and message[0] == "START":
+                elif state.PAUSED and command == "START":
+                    await client.write_gatt_char(UUID[f'dac1'], getattr(state, f"dac1"))
+                    await client.write_gatt_char(UUID[f'dac2'], getattr(state, f"dac2"))
                     for c in state.caps_enabled:
                         logger.info(f"Resuming notification of {UUID[f'cap{c}']}")
                         await client.start_notify(UUID[f'cap{c}'], callback)
                     state.resume()
 
-                if message[0] == "CH1":
-                    if message[1] != state.CH1_ACTIVE:
-                        if message[1]:
-                            logger.info(f"starting notification of {UUID[f'cap1']}")
-                            await client.start_notify(UUID['cap1'], callback)
+                if command[:2] == "CH":
+                    ch = command[2]
+                    if value != state.CH1_ACTIVE:
+                        if value:
+                            logger.info(f"starting notification of {UUID[f'cap{ch}']}")
+                            await client.start_notify(UUID[f'cap{ch}'], callback)
                         else:
-                            logger.info(f"stopping notification of {UUID[f'cap1']}")
-                            await client.stop_notify(UUID['cap1'])
-                    state.ch_state(1, message[1])
-                if message[0] == "CH2":
-                    if message[1] != state.CH2_ACTIVE:
-                        if message[1]:
-                            logger.info(f"starting notification of {UUID[f'cap2']}")
-                            await client.start_notify(UUID['cap2'], callback)
-                        else:
-                            logger.info(f"stopping notification of {UUID[f'cap2']}")
-                            await client.stop_notify(UUID['cap2'])
-                    state.ch_state(2, message[1])
-                if message[0] == "STOP":
+                            logger.info(f"stopping notification of {UUID[f'cap{ch}']}")
+                            await client.stop_notify(UUID[f'cap{ch}'])
+                    state.ch_state(ch, value)
+                if command[:3] == "DAC":
+                    ch = command[3]
+                    setattr(state, f"dac{ch}", value)
+                    await client.write_gatt_char(UUID[f'dac{ch}'], getattr(state, f"dac{ch}"))
+
+                if command == "STOP":
                     break
             await asyncio.sleep(1)
-
-
-def invalid_message(c):
-    logger.warning(f"Invalid message: {c}")
 
 
 async def start_notify_uuid(addr, loop, pipe: "Pipe", callback, wait_time=None):
@@ -139,24 +152,29 @@ async def start_notify_uuid(addr, loop, pipe: "Pipe", callback, wait_time=None):
     while True:
         logger.info(f"Waiting for commands")
         pipe.poll(None)
-        c = pipe.recv()
-        logger.info(f"{c} received")
-        if c[0] == "MAC":
-            logger.info(f"Address set to {c[1]}")
-            addr = c[1]
-        elif c[0] == "CH1" and c[1]:
-            state.ch_enabled(1, c[1])
-            uuids.add(UUID["cap1"])
-        elif c[0] == "CH2" and c[1]:
-            state.ch_enabled(2, c[1])
-            uuids.add(UUID["cap2"])
-        if c[0] == "CONNECT":
+        command, value = pipe.recv()
+        logger.info(f"{command}, {value} received")
+        if command == "CONNECT":
             break
+
+        if command == "MAC":
+            logger.info(f"Address set to {value}")
+            addr = value
+        if command[:2] == "CH":
+            ch = command[2]
+            state.ch_enabled(ch, value)
+            uuids.add(UUID[f"cap{ch}"])
+        if command[:3] == "DAC":
+            ch = command[3]
+            logger.info(f"dac{ch} value set to {value}")
+            setattr(state, f"dac{ch}", value)
 
     logger.info(f"Connecting to {addr}")
     async with BleakClient(addr, loop=loop) as client:
         logger.info(f"Connected to {client.address}")
         pipe.send(("CONNECTED", None))
+        await client.write_gatt_char(UUID[f'dac1'], state.dac1)
+        await client.write_gatt_char(UUID[f'dac2'], state.dac2)
         state.connected()
         await while_loop(pipe, state, wait_time, client, callback)
 

@@ -86,8 +86,8 @@ class PlottingSection(Section):
 class BoardSection(Section):
     name = "board"
     mac = StringDescriptor("DC:4E:6D:9F:E3:BA")
-    dac_a = Descriptor(0)
-    dac_b = Descriptor(0)
+    dac1 = Descriptor(0)
+    dac2 = Descriptor(0)
 
 
 class DefaultSection(Section):
