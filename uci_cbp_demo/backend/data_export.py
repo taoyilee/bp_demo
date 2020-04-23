@@ -20,7 +20,7 @@ class FileExporterSession:
         self._output_directory.mkdir(parents=True, exist_ok=True)
         logger.info(f"Starting new FileExporterSession under {self._output_directory}")
         self.df = pd.DataFrame(
-            columns=["time", "cap1", "cap2",
+            columns=["time", "wall_clock", "cap1", "cap2",
                      "accx", "accy", "accz",
                      "gyrox", "gyroy", "gyroz",
                      "magx", "magy", "magz"])

@@ -1,6 +1,7 @@
 # MIT License
 # Copyright (C) Michael Tao-Yi Lee (taoyil AT UCI EDU)
 
+import datetime
 import logging
 import multiprocessing
 import select
@@ -40,6 +41,7 @@ class CapData:
         self.acc = acc
         self.gyro = gyro
         self.mag = mag
+        self.wall_clock = datetime.datetime.now().isoformat()
 
     @classmethod
     def from_bytes(cls, sender, bytes_array):
@@ -69,7 +71,7 @@ class CapData:
         return f"CH{self.channel} {self.cap:.3f} pF @ {1000 * self.time:.2f} ms"
 
     def to_dict(self):
-        return {"time": self.time, "cap1": self.cap if self.channel == 1 else None,
+        return {"time": self.time, "wall_clock": self.wall_clock, "cap1": self.cap if self.channel == 1 else None,
                 "cap2": self.cap if self.channel == 2 else None,
                 "accx": self.acc.x, "accy": self.acc.y, "accz": self.acc.z,
                 "gyrox": self.gyro.x, "gyroy": self.gyro.y, "gyroz": self.gyro.z,
