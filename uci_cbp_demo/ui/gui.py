@@ -35,6 +35,10 @@ class GUIView(tkinter.Tk):
         self.wm_minsize(self.MIN_WIDTH, self.MIN_HEIGHT)
         self.mac_str_var = tkinter.StringVar()
         self.mac_str_var.set(config.board.mac)
+
+        self.file_prefix_var = tkinter.StringVar()
+        self.file_prefix_var.set("session")
+
         ws = self.winfo_screenwidth()
         hs = self.winfo_screenheight()
         logger.info(f"Screen WXH  = {ws}X{hs}")
@@ -92,6 +96,11 @@ class GUIView(tkinter.Tk):
         self.dac_a_control.pack(side=tkinter.LEFT)
         self.dac_b_control = DACControl(self, self.model, "(-)", "2", padx=5, state=ACTIVE)
         self.dac_b_control.pack(side=tkinter.LEFT)
+        self.label_prefix = tkinter.Label(master=self, text=f"File prefix (set before connect):", state=ACTIVE)
+        self.label_prefix.pack(side=tkinter.LEFT)
+
+        self.file_prefix = tkinter.Entry(master=self, textvariable=self.file_prefix_var)
+        self.file_prefix.pack(side=tkinter.LEFT)
 
 
 class GUIModel:
@@ -242,7 +251,11 @@ class GUIController:
 
     def connect(self):
         config.board.mac = self._view.mac_str_var.get()
-        self.exporter.new_session()
+        self.exporter.new_session(self._view.file_prefix_var.get())
+        if self.model.imu:
+            self.exporter.incite_imu()
+        else:
+            self.exporter.suppress_imu()
         self.model.attach_exporter(self.exporter)
         self.model.init(self._view.mac_str_var.get())
         self.model.pipe.poll(None)
@@ -257,10 +270,12 @@ class GUIController:
             return
         if _btn.cget("relief") == "sunken":
             self.model.imu = False
+            self.exporter.suppress_imu()
             config.plotting.imu_en = False
             _btn.configure(relief="raised")
         else:
             self.model.imu = True
+            self.exporter.incite_imu()
             config.plotting.imu_en = True
             _btn.configure(relief="sunken")
 
@@ -299,10 +314,12 @@ class GUIController:
         model.ch1 = config.plotting.ch1_en
         model.ch2 = config.plotting.ch2_en
         model.imu = config.plotting.imu_en
+
         from appdirs import user_data_dir
         _fe_conf = FileExporterConf()
         _fe_conf.app_data_directory = user_data_dir(uci_cbp_demo.__appname__, uci_cbp_demo.__author__)
         self.exporter = FileExporter(_fe_conf)
+
         self.model = model
         self._view = GUIView(self.model)
 

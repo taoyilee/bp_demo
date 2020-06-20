@@ -44,7 +44,7 @@ class CapData:
         self.wall_clock = datetime.datetime.now().isoformat()
 
     @classmethod
-    def from_bytes(cls, sender, bytes_array):
+    def from_bytes(cls, sender, bytes_array, no_imu=False):
         try:
             unpacked = struct.unpack("HIhhhhhhhhh", bytes_array)
         except struct.error as e:
@@ -52,18 +52,20 @@ class CapData:
             raise e
         time_stamp = unpacked[0] * CLK_PERIOD
         cap_readings = 8 * np.array(unpacked[1]) / (2 ** 24 - 1)
+        if not no_imu:
+            acc = IMUData(time_stamp, cls.acc_full_scale * unpacked[2] / (2.0 ** 15),
+                          cls.acc_full_scale * unpacked[3] / (2.0 ** 15),
+                          cls.acc_full_scale * unpacked[4] / (2.0 ** 15))
 
-        acc = IMUData(time_stamp, cls.acc_full_scale * unpacked[2] / (2.0 ** 15),
-                      cls.acc_full_scale * unpacked[3] / (2.0 ** 15),
-                      cls.acc_full_scale * unpacked[4] / (2.0 ** 15))
-
-        gyro = IMUData(time_stamp, cls.gyro_full_scale * unpacked[5] / (2.0 ** 15),
-                       cls.gyro_full_scale * unpacked[6] / (2.0 ** 15),
-                       cls.gyro_full_scale * unpacked[7] / (2.0 ** 15))
-        mag = IMUData(time_stamp, cls.mag_full_scale * unpacked[8],
-                      cls.mag_full_scale * unpacked[9],
-                      cls.mag_full_scale * unpacked[10])
-        logger.debug(f"mag: {mag.x:.2f} {mag.y:.2f} {mag.z:.2f}")
+            gyro = IMUData(time_stamp, cls.gyro_full_scale * unpacked[5] / (2.0 ** 15),
+                           cls.gyro_full_scale * unpacked[6] / (2.0 ** 15),
+                           cls.gyro_full_scale * unpacked[7] / (2.0 ** 15))
+            mag = IMUData(time_stamp, cls.mag_full_scale * unpacked[8],
+                          cls.mag_full_scale * unpacked[9],
+                          cls.mag_full_scale * unpacked[10])
+            logger.debug(f"mag: {mag.x:.2f} {mag.y:.2f} {mag.z:.2f}")
+        else:
+            acc, mag, gyro = None, None, None
         channel = 1 if sender == CAP1_CHAR_UUID else 2
         return cls(time_stamp, cap_readings, channel, acc, gyro, mag)
 
@@ -71,11 +73,17 @@ class CapData:
         return f"CH{self.channel} {self.cap:.3f} pF @ {1000 * self.time:.2f} ms"
 
     def to_dict(self):
-        return {"time": self.time, "wall_clock": self.wall_clock, "cap1": self.cap if self.channel == 1 else None,
-                "cap2": self.cap if self.channel == 2 else None,
-                "accx": self.acc.x, "accy": self.acc.y, "accz": self.acc.z,
-                "gyrox": self.gyro.x, "gyroy": self.gyro.y, "gyroz": self.gyro.z,
-                "magx": self.mag.x, "magy": self.mag.y, "magz": self.mag.z}
+        return_dict = {"time": self.time, "wall_clock": self.wall_clock,
+                       "cap1": self.cap if self.channel == 1 else None,
+                       "cap2": self.cap if self.channel == 2 else None}
+
+        if self.acc is not None:
+            return_dict.update({"accx": self.acc.x, "accy": self.acc.y, "accz": self.acc.z})
+        if self.mag is not None:
+            return_dict.update({"magx": self.mag.x, "magy": self.mag.y, "magz": self.mag.z})
+        if self.gyro is not None:
+            return_dict.update({"gyrox": self.gyro.x, "gyroy": self.gyro.y, "gyroz": self.gyro.z})
+        return return_dict
 
 
 def is_data():
@@ -117,9 +125,12 @@ class CapCallback:
                 pass
         old_time = data.time
         data.time = self.max_time
-        data.mag.time = self.max_time
-        data.gyro.time = self.max_time
-        data.acc.time = self.max_time
+        if data.mag is not None:
+            data.mag.time = self.max_time
+        if data.gyro is not None:
+            data.gyro.time = self.max_time
+        if data.acc is not None:
+            data.acc.time = self.max_time
         logger.debug(f"{data.channel} {old_time:.3f} {self.max_time:.3f}")
 
         if len(self.history) > 2:
